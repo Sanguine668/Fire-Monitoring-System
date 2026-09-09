@@ -17,6 +17,7 @@ storage/snapshots/*
 
 # 数据集与权重（体积大，不入库）
 datasets/
+runs/
 *.pt
 *.weights
 *.onnx
