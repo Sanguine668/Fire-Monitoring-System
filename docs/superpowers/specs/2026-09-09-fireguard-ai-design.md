@@ -212,7 +212,7 @@ normal ──连续 N 帧 smoke 超阈值──→ 疑似 smoke ──持续超�
 
 ### 8.1 训练目标与验收口径
 
-- 采用 **gengyanlei 烟火数据集（VOC2020，JPEGImages 2059 张 + XML 标注）** 自训练较新的 YOLO 模型：Ultralytics 当前稳定版，**首选 YOLO11s**，若环境/依赖兼容性受阻则回退 YOLOv8s；显存 ≥8GB 用 s/m，<8GB 用 n/s；
+- 采用 **gengyanlei 烟火数据集（VOC2020，JPEGImages 2059 张 + XML 标注）** 自训练较新的 YOLO 模型：Ultralytics 当前稳定版（2026-09 官方文档推荐 YOLO26 系列），**首轮使用 YOLO26n**（适配 6GB 显存、保证第一周跑通）；首轮稳定后可选 YOLO26s/YOLO11s 做精度对比并记录；
 - 验收指标：验证集 mAP50、mAP50-95、Precision、Recall、F1，目标 mAP50 ≥ 0.75（数据集标注噪声下允许合理调整目标并记录）；
 - 课堂演示口径：对手机翻拍/上传的烟火素材能稳定出框，单帧 GPU 推理延迟可满足 3~5 FPS；
 - 与 D-Fire YOLOv8n、gengyanlei yolov5 best.pt（必要时 Pyronear）在同一验证集与演示素材上做对比，产出对比报告。
