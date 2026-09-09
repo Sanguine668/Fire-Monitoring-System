@@ -1,0 +1,2 @@
+* { box-sizing: border-box; }
+html, body, #app { margin: 0; height: 100%; font-family: 'Microsoft YaHei', system-ui, sans-serif; }
