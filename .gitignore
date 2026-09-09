@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node / Vue
+node_modules/
+dist/
+
+# 运行时数据
+FireGuard_AI_Demo_Windows/storage/*.db
+FireGuard_AI_Demo_Windows/storage/snapshots/*
+storage/*.db
+storage/uploads/*
+storage/snapshots/*
+
+# 数据集与权重（体积大，不入库）
+datasets/
+*.pt
+*.weights
+*.onnx
+
+# 系统文件
+.DS_Store
+Thumbs.db
