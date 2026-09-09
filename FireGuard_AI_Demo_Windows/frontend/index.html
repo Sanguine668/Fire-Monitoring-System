@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FireGuard AI · 火灾智能预警系统</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body>
+<div id="toast" class="toast"></div>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">F</div><div><b>FireGuard AI</b><span>火灾智能预警平台</span></div></div>
+    <nav>
+      <button class="nav-item active" data-page="dashboard"><span>◫</span> 监控总览</button>
+      <button class="nav-item" data-page="monitor"><span>◉</span> 实时监控</button>
+      <button class="nav-item" data-page="alarms"><span>⚠</span> 告警中心 <i id="alarmBadge">0</i></button>
+      <button class="nav-item" data-page="cameras"><span>▣</span> 视频源管理</button>
+      <button class="nav-item" data-page="settings"><span>⚙</span> 系统设置</button>
+    </nav>
+    <div class="sidebar-bottom"><div class="status-dot"></div><div><b>AI 推理服务</b><span>运行正常 · Demo Engine</span></div></div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><div><h1 id="pageTitle">监控总览</h1><p id="pageSub">园区重点区域安全态势实时监测</p></div><div class="top-actions"><div class="clock"><span>系统时间</span><b id="clock"></b></div><div class="avatar">管理员</div></div></header>
+
+    <section id="dashboard" class="page active">
+      <div class="metric-grid">
+        <div class="metric"><div class="metric-icon blue">▣</div><div><span>监控点位</span><strong id="metricCameras">4</strong><small id="metricOnline">4 个在线</small></div></div>
+        <div class="metric"><div class="metric-icon amber">⚠</div><div><span>今日告警</span><strong id="metricAlarms">0</strong><small>实时累计</small></div></div>
+        <div class="metric"><div class="metric-icon red">🔥</div><div><span>严重告警</span><strong id="metricCritical">0</strong><small>明火 / 高风险</small></div></div>
+        <div class="metric"><div class="metric-icon green">✓</div><div><span>系统可用率</span><strong>99.8%</strong><small>检测服务稳定</small></div></div>
+      </div>
+      <div class="dashboard-grid">
+        <div class="panel monitor-panel">
+          <div class="panel-head"><div><h2>实时监控 · 仓库东区-01</h2><span class="online-pill">● 在线</span></div><button class="ghost" onclick="goPage('monitor')">进入监控</button></div>
+          <div class="camera-stage mini" id="dashStage">
+            <div class="warehouse-scene"><div class="beam b1"></div><div class="beam b2"></div><div class="shelf s1"></div><div class="shelf s2"></div><div class="box-stack x1"></div><div class="box-stack x2"></div><div class="floor-line"></div></div>
+            <div class="scanline"></div><div class="camera-label">CAM-01 · 1920×1080 · LIVE</div>
+            <div class="detection-box fire-box hidden"><label>FIRE <b>0.92</b></label></div>
+            <div class="detection-box smoke-box hidden"><label>SMOKE <b>0.81</b></label></div>
+            <div class="smoke-effect hidden"></div><div class="fire-effect hidden">🔥</div>
+          </div>
+          <div class="ai-strip"><span><i></i> AI 检测运行中</span><span>FPS <b id="dashFps">8.6</b></span><span>推理 <b id="dashLatency">36 ms</b></span><span>风险评分 <b id="dashRisk">08</b>/100</span></div>
+        </div>
+        <div class="panel risk-panel"><div class="panel-head"><h2>实时风险等级</h2></div><div class="risk-ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="50"></circle><circle id="riskCircle" class="progress" cx="60" cy="60" r="50"></circle></svg><div><strong id="riskScore">08</strong><span>/ 100</span></div></div><div id="riskLabel" class="risk-label safe">当前安全</div><p id="riskText">未检测到烟雾或明火目标</p><div class="legend"><span><i class="g"></i>正常 0-30</span><span><i class="y"></i>预警 31-70</span><span><i class="r"></i>危险 71-100</span></div></div>
+      </div>
+      <div class="bottom-grid">
+        <div class="panel"><div class="panel-head"><h2>近 7 日告警趋势</h2><span class="muted">单位：次</span></div><div class="bar-chart" id="barChart"></div></div>
+        <div class="panel"><div class="panel-head"><h2>最近告警</h2><button class="ghost" onclick="goPage('alarms')">查看全部</button></div><div id="recentAlarms" class="recent-list"><div class="empty">暂无告警记录</div></div></div>
+      </div>
+    </section>
+
+    <section id="monitor" class="page">
+      <div class="monitor-layout">
+        <div class="panel big-monitor"><div class="panel-head"><div><h2>仓库东区-01</h2><span class="online-pill">● RTSP 模拟视频源</span></div><div class="demo-buttons"><button onclick="triggerDemo('normal')">正常</button><button class="warn" onclick="triggerDemo('smoke')">烟雾测试</button><button class="danger" onclick="triggerDemo('fire')">明火测试</button></div></div>
+          <div class="camera-stage large" id="mainStage"><div class="warehouse-scene"><div class="beam b1"></div><div class="beam b2"></div><div class="shelf s1"></div><div class="shelf s2"></div><div class="box-stack x1"></div><div class="box-stack x2"></div><div class="floor-line"></div></div><div class="scanline"></div><div class="camera-label">CAM-01 · DEMO STREAM · LIVE</div><div class="detection-box fire-box hidden"><label>FIRE <b>0.92</b></label></div><div class="detection-box smoke-box hidden"><label>SMOKE <b>0.81</b></label></div><div class="smoke-effect hidden"></div><div class="fire-effect hidden">🔥</div></div>
+        </div>
+        <div class="side-stack"><div class="panel"><div class="panel-head"><h2>AI 检测状态</h2></div><div class="detail-list"><div><span>推理引擎</span><b>DemoDetector v1</b></div><div><span>检测帧率</span><b id="fps">8.6 FPS</b></div><div><span>推理耗时</span><b id="latency">36 ms</b></div><div><span>当前风险</span><b id="currentRisk">正常</b></div><div><span>检测目标</span><b id="objectCount">0</b></div></div></div><div class="panel"><div class="panel-head"><h2>演示说明</h2></div><p class="help">点击上方“烟雾测试”或“明火测试”，系统将模拟 YOLO 输出，并通过 WebSocket 触发检测框、风险评分和告警事件。</p><div class="flow"><span>视频流</span><b>→</b><span>AI检测</span><b>→</b><span>规则引擎</span><b>→</b><span>告警</span></div></div></div>
+      </div>
+    </section>
+
+    <section id="alarms" class="page"><div class="panel full"><div class="panel-head"><div><h2>告警事件中心</h2><p>烟雾、明火及分级风险事件</p></div><button onclick="loadAlarms()">刷新</button></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>监控点</th><th>类型</th><th>风险等级</th><th>置信度</th><th>状态</th><th>操作</th></tr></thead><tbody id="alarmTable"></tbody></table></div></div></section>
+
+    <section id="cameras" class="page"><div class="panel full"><div class="panel-head"><div><h2>视频源管理</h2><p>当前使用 RTSP 模拟摄像头，可直接替换为真实设备地址</p></div><button>+ 添加视频源</button></div><div id="cameraCards" class="camera-cards"></div></div></section>
+
+    <section id="settings" class="page"><div class="settings-grid"><div class="panel"><div class="panel-head"><h2>检测与告警参数</h2></div><form id="settingsForm" class="settings-form"><label>明火置信度阈值<input id="fireThreshold" type="number" step="0.01" min="0.1" max="0.99"></label><label>烟雾置信度阈值<input id="smokeThreshold" type="number" step="0.01" min="0.1" max="0.99"></label><label>连续检测帧数<input id="continuousFrames" type="number" min="1" max="30"></label><label>告警冷却时间（秒）<input id="alarmCooldown" type="number" min="1" max="120"></label><button type="submit" class="primary">保存参数</button></form></div><div class="panel"><div class="panel-head"><h2>模型信息</h2></div><div class="model-card"><div class="model-logo">AI</div><div><h3>Fire / Smoke Detector</h3><p>演示模式：规则化模拟 YOLO 检测输出</p><span>接口已预留，可替换 YOLOv5 / YOLO11 / ONNX / TensorRT</span></div></div><div class="detail-list model-details"><div><span>类别</span><b>fire / smoke</b></div><div><span>输入</span><b>RTSP / MP4</b></div><div><span>输出</span><b>bbox + confidence</b></div><div><span>告警策略</span><b>连续帧 + 阈值 + 冷却</b></div></div></div></div></section>
+  </main>
+</div>
+<script src="/assets/app.js"></script>
+</body>
+</html>
