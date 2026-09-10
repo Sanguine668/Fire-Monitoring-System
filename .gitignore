@@ -37,3 +37,9 @@ docs/课程任务/_qa/
 docs/课程任务/_模板转换/
 docs/课程任务/数据集预览/thumbnails/
 提交文档/
+
+# 本地归档中的大文件与临时产物（归档目录本身保留，其余按需忽略）
+archive/yolo26n.pt
+archive/_qa_渲染检查/
+archive/_临时输出/
+archive/**/storage/

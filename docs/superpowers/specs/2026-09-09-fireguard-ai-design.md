@@ -3,7 +3,7 @@
 - 课程：软件项目管理 · 小组实训
 - 文档版本：v1.0（设计确认版）
 - 日期：2026-09-09
-- 关联文档：《项目介绍与任务分工.md》（v0.4，人员角色与分工见该文）
+- 关联文档：《项目介绍与任务分工.md》（docs/课程任务/，v0.4，人员角色与分工见该文）
 
 ---
 
@@ -201,7 +201,7 @@ normal ──连续 N 帧 smoke 超阈值──→ 疑似 smoke ──持续超�
 
 ### 7.2 约定
 
-- 视觉与交互参考现有 `FireGuard_AI_Demo_Windows/frontend`（不作为正式代码迁移）；
+- 视觉与交互参考现有 `archive/早期演示系统/FireGuard_AI_Demo_Windows/frontend`（不作为正式代码迁移）；
 - 组件化拆分：VideoCard、AlarmTable、CameraDialog、UploadDialog、SettingsForm、ChartPanel；
 - 开发期前端调用通过 Vite proxy 指向 FastAPI（默认 8000 端口）；
 - 演示构建：`npm run build` → FastAPI 托管 `dist/`，课堂一键启动。
