@@ -76,7 +76,13 @@ class DetectionWorker(threading.Thread):
                     int(s["continuous_frames"]),
                     float(s["alarm_cooldown"]),
                 )
-                draw_detections(frame, objects)
+                visible = [
+                    d
+                    for d in objects
+                    if (d["type"] == "fire" and d["confidence"] >= float(s["fire_threshold"]))
+                    or (d["type"] == "smoke" and d["confidence"] >= float(s["smoke_threshold"]))
+                ]
+                draw_detections(frame, visible)
                 ok_jpeg, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), FRAME_QUALITY])
                 if ok_jpeg:
                     self.latest_jpeg = buf.tobytes()

@@ -155,7 +155,7 @@ Vue3 + Element Plus + ECharts 前端
 
 - `cameras`：见 4.1；
 - `alarms`：沿用 demo 字段，预留 `snapshot_path`（快照阶段启用）；
-- `settings`：`fire_threshold`（默认 0.62）、`smoke_threshold`（0.55）、`continuous_frames`（4）、`alarm_cooldown`（8），全部真实接入规则引擎；
+- `settings`：`fire_threshold`（默认 0.1）、`smoke_threshold`（0.1）、`continuous_frames`（3）、`alarm_cooldown`（8），全部真实接入规则引擎；阈值默认值依据首轮模型的置信度校准结果设定（该权重置信度整体偏低，详见 docs/ai-training-records.md），换模型后需重新校准。
 - 新增 `model_runs` 表（可选）：记录训练/评测实验（模型名、数据版本、mAP、日期），支撑对比报告。
 
 ---

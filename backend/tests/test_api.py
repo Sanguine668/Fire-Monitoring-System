@@ -6,7 +6,7 @@ from backend.app.main import app
 def test_api_flow() -> None:
     with TestClient(app) as client:
         assert client.get("/api/health").status_code == 200
-        assert client.get("/api/settings").json()["fire_threshold"] == 0.5
+        assert client.get("/api/settings").json()["fire_threshold"] == 0.1
         assert client.get("/api/cameras").json() == []
 
         r = client.post(

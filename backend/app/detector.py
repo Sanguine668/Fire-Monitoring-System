@@ -16,7 +16,14 @@ class YoloDetector:
         path = str(model_path or MODEL_PATH)
         self.model = YOLO(path)
         self._lock = threading.RLock()
-        self.names = {v: str(k).lower() for k, v in self.model.names.items()}
+        raw_names = self.model.names
+        if isinstance(raw_names, dict) and all(isinstance(k, str) for k in raw_names):
+            id2name = {int(v): k for k, v in raw_names.items()}
+        elif isinstance(raw_names, dict):
+            id2name = raw_names
+        else:
+            id2name = dict(enumerate(raw_names))
+        self.id2name = {int(k): str(v).lower() for k, v in id2name.items()}
 
     def detect(self, frame) -> list[dict[str, Any]]:
         import torch
@@ -25,7 +32,7 @@ class YoloDetector:
         if device is None:
             device = 0 if torch.cuda.is_available() else "cpu"
         with self._lock:
-            results = self.model.predict(frame, imgsz=640, conf=0.1, device=device, verbose=False)
+            results = self.model.predict(frame, imgsz=640, conf=0.05, device=device, verbose=False)
         out: list[dict[str, Any]] = []
         for r in results:
             if r.boxes is None:
@@ -34,7 +41,7 @@ class YoloDetector:
             confs = r.boxes.conf.cpu().numpy()
             cls = r.boxes.cls.cpu().numpy().astype(int)
             for box, c, ci in zip(xyxy, confs, cls):
-                name = self.names.get(int(ci), "unknown")
+                name = self.id2name.get(int(ci), "unknown")
                 if name not in {"fire", "smoke"}:
                     continue
                 x1, y1, x2, y2 = map(float, box)
