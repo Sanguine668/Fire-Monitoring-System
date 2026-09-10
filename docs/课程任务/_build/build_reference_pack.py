@@ -318,7 +318,7 @@ def main() -> None:
         [3.4, 7.6, 4.4],
     )
 
-    path = OUT / "项目统一参考材料（写作口径包）.docx"
+    path = OUT / "项目统一参考材料（写作口径包）v1.1.docx"
     doc.save(path)
     print(path)
 

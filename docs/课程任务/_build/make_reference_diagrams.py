@@ -103,23 +103,50 @@ def dataflow() -> None:
 
 
 def alarm_state() -> None:
-    fig, ax = plt.subplots(figsize=(9.6, 5.0), dpi=200)
+    fig, ax = plt.subplots(figsize=(10.4, 5.8), dpi=200)
     ax.set_xlim(0, 10)
-    ax.set_ylim(0, 5.4)
+    ax.set_ylim(0, 6.0)
     ax.axis("off")
-    box(ax, 0.4, 3.6, 2.4, 1.0, "正常状态\nnormal", fill="#EDF7F0", edge=GREEN, bold=True)
-    box(ax, 3.6, 3.6, 2.6, 1.0, "疑似烟雾\n（连续帧计数中）", fill="#FFF6E5", edge="#B7791F", bold=True)
-    box(ax, 7.0, 3.6, 2.6, 1.0, "黄色预警\nwarning", fill="#FFF6E5", edge="#B7791F", bold=True)
-    box(ax, 3.6, 1.2, 2.6, 1.0, "红色火灾告警\ncritical", fill="#FDECEC", edge=ACCENT, bold=True)
+    box(ax, 0.3, 3.9, 2.3, 1.0, "正常状态\nnormal", fill="#EDF7F0", edge=GREEN, bold=True)
+    box(ax, 3.4, 3.9, 2.9, 1.0, "疑似烟雾\nsmoke_streak 计数中", fill="#FFF6E5", edge="#B7791F", bold=True)
+    box(ax, 7.1, 3.9, 2.6, 1.0, "黄色预警\nwarning", fill="#FFF6E5", edge="#B7791F", bold=True)
+    box(ax, 3.4, 1.1, 2.9, 1.0, "红色火灾告警\ncritical", fill="#FDECEC", edge=ACCENT, bold=True)
 
-    arrow(ax, 2.8, 4.1, 3.6, 4.1, text="检出烟雾(≥阈值)", offset=(0, 0.08))
-    arrow(ax, 6.2, 4.1, 7.0, 4.1, text="连续 N 帧", offset=(0, 0.08))
-    arrow(ax, 8.3, 3.6, 8.3, 2.0, color=ACCENT, text="检出 fire 或 fire+smoke", offset=(0.05, 0))
-    arrow(ax, 6.2, 2.0, 7.0, 1.7, color=ACCENT, style="-|>")
-    arrow(ax, 3.6, 1.9, 1.6, 3.6, text="告警冷却/复核后\n降级或复位", offset=(-0.2, 0.08))
-    ax.text(0.4, 5.0, "告警判定状态机（每路视频源独立）", fontsize=13, fontweight="bold", color=BLUE)
-    ax.text(0.4, 0.5, "规则：置信度阈值 + 连续帧确认 + 告警冷却；视频源离线时状态机复位，避免重连误报。",
-            fontsize=9, color="#4B5563")
+    # smoke 链路：正常 → 疑似（计数） → 连续 N 帧 → 黄色预警
+    arrow(ax, 2.6, 4.4, 3.4, 4.4, text="检出 smoke ≥ 阈值", offset=(0, 0.06), lw=1.4)
+    ax.add_patch(
+        FancyArrowPatch((4.8, 4.9), (5.9, 4.9), connectionstyle="arc3,rad=-1.1",
+                        arrowstyle="-|>", mutation_scale=12, linewidth=1.3, color="#B7791F")
+    )
+    ax.text(5.35, 5.62, "连续检出 smoke：streak + 1", ha="center", fontsize=8.5, color="#B7791F")
+    arrow(ax, 6.3, 4.4, 7.1, 4.4, text="streak ≥ 连续帧 N", offset=(0, 0.06), color="#B7791F", lw=1.4)
+
+    # fire 链路：任意状态检出 fire 直接进入 critical
+    arrow(ax, 1.5, 3.9, 4.0, 2.1, color=ACCENT, lw=1.5)
+    arrow(ax, 4.8, 3.9, 4.8, 2.1, color=ACCENT, lw=1.5)
+    arrow(ax, 8.4, 3.9, 5.6, 2.1, color=ACCENT, lw=1.5)
+    ax.text(6.25, 2.75, "任意状态检出 fire ≥ 阈值\n→ 立即生成红色告警", ha="center", fontsize=9,
+            color=ACCENT, fontweight="bold", linespacing=1.5)
+
+    # 复位链路
+    ax.add_patch(
+        FancyArrowPatch((3.9, 3.9), (1.9, 4.9), connectionstyle="arc3,rad=0.35",
+                        arrowstyle="-|>", mutation_scale=12, linewidth=1.1, color=GREEN, linestyle="--")
+    )
+    ax.add_patch(
+        FancyArrowPatch((7.6, 3.9), (2.4, 4.9), connectionstyle="arc3,rad=-0.25",
+                        arrowstyle="-|>", mutation_scale=12, linewidth=1.1, color=GREEN, linestyle="--")
+    )
+    ax.text(4.9, 3.45, "当前帧无有效烟火目标：streak 清零，状态回到 normal", ha="center",
+            fontsize=8.5, color=GREEN)
+
+    box(ax, 0.3, 0.25, 4.5, 0.75,
+        "冷却规则：距上次落库不足 8 秒时，仅更新状态与风险分，不重复写库",
+        fill="#F2F4F7", edge=BLUE, size=8.5)
+    box(ax, 5.2, 0.25, 4.5, 0.75,
+        "视频源离线：状态机复位（streak=0、status=normal），避免重连误报",
+        fill="#F2F4F7", edge=BLUE, size=8.5)
+    ax.text(0.3, 5.55, "告警判定状态机（每路视频源独立）", fontsize=13, fontweight="bold", color=BLUE)
     fig.tight_layout()
     fig.savefig(OUT / "alarm_state.png", bbox_inches="tight", facecolor="white")
     plt.close(fig)
