@@ -30,3 +30,8 @@ Thumbs.db
 
 # 测试与临时输出
 *.out
+
+# 课程材料中间产物
+docs/课程任务/_qa/
+docs/课程任务/_模板转换/
+docs/课程任务/数据集预览/thumbnails/

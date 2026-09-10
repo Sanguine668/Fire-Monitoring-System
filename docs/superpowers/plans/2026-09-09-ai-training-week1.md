@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在成员 A 的 RTX 4050（6GB）笔记本上搭建 CUDA 训练环境，将 gengyanlei 烟火数据集（VOC2020）转为 Ultralytics YOLO 格式，完成首轮 YOLO26n 训练与验证，产出可对比的指标记录。
+**Goal:** 在蔡俊杰 的 RTX 4050（6GB）笔记本上搭建 CUDA 训练环境，将 gengyanlei 烟火数据集（VOC2020）转为 Ultralytics YOLO 格式，完成首轮 YOLO26n 训练与验证，产出可对比的指标记录。
 
 **Architecture:** Python 独立虚拟环境 `ai/.venv`（不影响系统 Python）；VOC XML 由 `scripts/voc2yolo.py` 转换为 YOLO txt 并划分训练/验证集；`scripts/train_yolo.py` 基于 Ultralytics 官方 API 训练并自动验证。数据与权重体积大，不入 Git。
 

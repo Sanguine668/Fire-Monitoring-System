@@ -1,0 +1,225 @@
+{
+  "images": 2059,
+  "boxes": 3299,
+  "classes": {
+    "fire": 3299
+  },
+  "exact_duplicate_groups": 57,
+  "exact_duplicate_images": 59,
+  "near_duplicate_groups": 149,
+  "near_duplicate_images": 184,
+  "near_duplicate_top": [
+    {
+      "size": 10,
+      "images": [
+        "21f6bea6-741d-4068-bf34-4eacc1707209.jpg",
+        "318db113-d485-40f2-b88a-944aee2415a2.jpg",
+        "34d210f5-eeca-4c92-82f9-ae2da18a3379.jpg",
+        "36bf404d-4c6a-42c6-8d76-05cbcc301758.jpg",
+        "fire014.jpg",
+        "img (129).jpg",
+        "img (23).jpg",
+        "pic (182).jpg",
+        "pic (183).jpg",
+        "small (96).jpg"
+      ]
+    },
+    {
+      "size": 9,
+      "images": [
+        "0ef48d6f-4c61-4c86-914f-7a6a2b70759a.jpg",
+        "1_41.jpg",
+        "1_56.jpg",
+        "27c3d371-35f2-48a5-8c74-5dc1923196dc.jpg",
+        "7306c383-82c9-4bed-a543-5c6a67c21ed0.jpg",
+        "90713_Wichman_FIre_004A.jpg",
+        "burning-hause-1535712.jpg",
+        "e5e9c618-e5e9-4bb3-8c28-66948b07e200.jpg",
+        "pic (189).jpg"
+      ]
+    },
+    {
+      "size": 5,
+      "images": [
+        "1_10.jpg",
+        "1_6.jpg",
+        "1_7.jpg",
+        "1_8.jpg",
+        "1_9.jpg"
+      ]
+    },
+    {
+      "size": 4,
+      "images": [
+        "1_47.jpg",
+        "1_48.jpg",
+        "1_49.jpg",
+        "1_50.jpg"
+      ]
+    },
+    {
+      "size": 4,
+      "images": [
+        "1_78.jpg",
+        "1_79.jpg",
+        "1_80.jpg",
+        "1_81.jpg"
+      ]
+    },
+    {
+      "size": 4,
+      "images": [
+        "1_91.jpg",
+        "1_92.jpg",
+        "1_93.jpg",
+        "1_94.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "0431a7d5-b76b-4a56-83f1-f0e556546961.jpg",
+        "897c1d2a-4ce6-466d-941d-c3d7cc8808ca.jpg",
+        "cafe68d5-c234-4c7e-9086-2f122cbe9d76.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "0aecd409-8466-42bb-824a-e43ece9a4ec2.jpg",
+        "82c92d06-098b-48d6-8bd8-fa1c1a72ce94.jpg",
+        "ce204fc0-5f7c-43e8-8922-fb30415993ca.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "148e6c5c-bea2-4497-b545-977125d9474e.jpg",
+        "6e9df7f8-c250-4897-9bfe-e6c97905728d.jpg",
+        "aadca7e8-bf65-47f7-a27a-0fcad36eab1a.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "1_1.jpg",
+        "1_2.jpg",
+        "1_3.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "20b74ff0-2ef2-4125-aa63-2adbe0aaffe9.jpg",
+        "32471c51-1e8e-4fb4-bae5-892cb54c37c7.jpg",
+        "ac0722c2-5c48-4f68-a791-f8efd510b39c.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "229d70b9-d735-4ec0-8781-017e506193ae.jpg",
+        "49cc26ba-2cbf-4a70-88a7-4f3c32a06cd0.jpg",
+        "b45a7250-da95-44e5-8ded-058aec919d8d.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "3035b58a-eba8-4cc2-93dd-ad5cc48ebb2e.jpg",
+        "417cfe66-4718-407d-ac0e-a85863a58d2e.jpg",
+        "5061d0f1-869b-4001-adfc-1e4357150568.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "3c2a384f-ce1c-4077-9d68-8c48f565f0c4.jpg",
+        "5c945e49-084e-4f79-b933-bf57905511d9.jpg",
+        "87fe2707-4389-4f63-9589-1b7bfd322a00.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "59be593f-8902-48c3-9e83-33eb67f928cc.jpg",
+        "75b39118-8179-4394-9373-2ef2cdfae9a6.jpg",
+        "e6decc66-3bb8-48cc-927f-61bcacedba61.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "70e9a135-d13e-4f7e-9f72-182b7de0f327.jpg",
+        "c87f3cff-3d28-4693-9b77-2e45b3ec4ef3.jpg",
+        "d864a60f-b0e6-47eb-ab2a-dc9872d8cdef.jpg"
+      ]
+    },
+    {
+      "size": 3,
+      "images": [
+        "8f4fd55a-bb2b-439a-a9f3-c98d82599f5f.jpg",
+        "c69da66a-1ebd-4a60-a40b-3fcd1c0b12b6.jpg",
+        "e085a630-da78-4867-84b2-3505837c35a5.jpg"
+      ]
+    },
+    {
+      "size": 2,
+      "images": [
+        "01973b31-8688-4673-b120-0a9a4fbfd458.jpg",
+        "4dd183c6-62e1-4498-98c2-9461d79108a6.jpg"
+      ]
+    },
+    {
+      "size": 2,
+      "images": [
+        "01efe90c-7ebe-413b-af2c-7193822cbb4a.jpg",
+        "bb524b12-7c24-43ca-a00c-a8d784790aef.jpg"
+      ]
+    },
+    {
+      "size": 2,
+      "images": [
+        "0368311b-58af-40d1-8050-ab3a35a423d1.jpg",
+        "b787187c-687f-4d06-b4f2-4b90b792f517.jpg"
+      ]
+    }
+  ],
+  "width": {
+    "min": 120,
+    "max": 4085,
+    "median": 500,
+    "lt640": 1378
+  },
+  "height": {
+    "min": 80,
+    "max": 3024,
+    "median": 360
+  },
+  "box_area_px": {
+    "small_lt32x32": 486,
+    "medium_32to96": 1239,
+    "large_ge96": 1574,
+    "small_ratio": 0.147,
+    "median_px": 8241.0
+  },
+  "relative_box_area": {
+    "median": 0.05065,
+    "lt_0.5pct": 366,
+    "ge_5pct": 1658
+  },
+  "boxes_per_image": {
+    "median": 1.0,
+    "max": 14,
+    "empty": 0
+  },
+  "sharpness_laplacian": {
+    "median": 705.2,
+    "lt50_blurry": 79
+  },
+  "brightness": {
+    "median": 96.6,
+    "lt40_dark": 119,
+    "gt200_overexposed": 0
+  }
+}
