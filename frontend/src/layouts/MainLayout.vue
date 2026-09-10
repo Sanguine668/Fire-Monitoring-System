@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useRealtime } from '../composables/useRealtime'
 
 const route = useRoute()
 const router = useRouter()
+const { realtime, unhandledCount } = useRealtime()
 const now = ref(new Date())
 const timer = setInterval(() => (now.value = new Date()), 1000)
 onUnmounted(() => clearInterval(timer))
@@ -46,7 +48,14 @@ function go(name) {
           <h2>{{ pageTitle }}</h2>
           <span>{{ pageSub }}</span>
         </div>
-        <div class="clock">{{ now.toLocaleString('zh-CN', { hour12: false }) }}</div>
+        <div class="status">
+          <span class="dot" :class="{ online: realtime.connected }" />
+          <span class="status-text">{{ realtime.connected ? '实时通道已连接' : '实时通道未连接' }}</span>
+          <el-badge v-if="unhandledCount > 0" :value="unhandledCount" class="badge">
+            <span class="alarm-text">本次会话新告警</span>
+          </el-badge>
+          <span class="clock">{{ now.toLocaleString('zh-CN', { hour12: false }) }}</span>
+        </div>
       </el-header>
       <el-main class="main">
         <router-view />
@@ -66,5 +75,10 @@ function go(name) {
 .header h2 { margin: 0; }
 .header span { color: #7b8494; font-size: 13px; }
 .clock { color: #4b5563; }
+.status { display: flex; align-items: center; gap: 10px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #c0c4cc; display: inline-block; }
+.dot.online { background: #23d18b; }
+.status-text { color: #7b8494; font-size: 12px; }
+.alarm-text { color: #e5484d; font-size: 12px; }
 .main { background: #f3f5f8; }
 </style>

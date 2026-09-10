@@ -1,62 +1,162 @@
 <script setup>
-import { ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
+import { api, streamUrl } from '../api'
 
-const cameras = ref([
-  { id: 1, name: '仓库东区-01', location: '原料仓库东侧', source: 'rtsp://demo/camera01', enabled: true },
-  { id: 2, name: '生产线-02', location: '二号生产线', source: 'rtsp://demo/camera02', enabled: true },
-  { id: 3, name: '配电室-03', location: '一层配电室', source: 'rtsp://demo/camera03', enabled: false },
-  { id: 4, name: '停车区-04', location: '厂区停车区', source: 'rtsp://demo/camera04', enabled: true }
-])
-
+const cameras = ref([])
+const loading = ref(false)
 const uploadVisible = ref(false)
+const addVisible = ref(false)
+const previewVisible = ref(false)
+const previewCamera = ref(null)
+const form = reactive({ name: '', location: '', source_type: 'http', source: '', loop: true })
 
-async function uploadFile({ file }) {
-  const form = new FormData()
-  form.append('file', file)
+async function load() {
+  loading.value = true
   try {
-    const res = await fetch('/api/uploads', { method: 'POST', body: form })
-    if (!res.ok) throw new Error('上传失败: HTTP ' + res.status)
-    ElMessage.success('上传成功，已加入视频源列表')
-    uploadVisible.value = false
-  } catch (err) {
-    ElMessage.error(err.message + '（请确认后端已启动）')
+    cameras.value = await api.cameras()
+  } catch (error) {
+    ElMessage.error(`加载视频源失败：${error.message}`)
+  } finally {
+    loading.value = false
   }
 }
+
+async function uploadFile({ file }) {
+  try {
+    await api.uploadVideo(file)
+    ElMessage.success('上传成功，已加入视频源列表')
+    uploadVisible.value = false
+    await load()
+  } catch (error) {
+    ElMessage.error(`上传失败：${error.message}（请确认后端已启动）`)
+  }
+}
+
+async function submitCamera() {
+  if (!form.name || !form.source) {
+    ElMessage.warning('请填写名称与视频地址')
+    return
+  }
+  try {
+    await api.addCamera({ ...form })
+    ElMessage.success('视频源已添加')
+    addVisible.value = false
+    Object.assign(form, { name: '', location: '', source_type: 'http', source: '', loop: true })
+    await load()
+  } catch (error) {
+    ElMessage.error(`添加失败：${error.message}`)
+  }
+}
+
+async function toggle(camera) {
+  try {
+    await api.toggleCamera(camera.id)
+    await load()
+  } catch (error) {
+    ElMessage.error(`操作失败：${error.message}`)
+  }
+}
+
+async function remove(camera) {
+  try {
+    await ElMessageBox.confirm(`确定删除视频源「${camera.name}」？`, '删除确认', { type: 'warning' })
+    await api.deleteCamera(camera.id)
+    ElMessage.success('已删除')
+    await load()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(`删除失败：${error.message}`)
+  }
+}
+
+function preview(camera) {
+  previewCamera.value = camera
+  previewVisible.value = true
+}
+
+onMounted(load)
 </script>
 
 <template>
-  <div>
-    <el-button type="primary" @click="uploadVisible = true">上传本地视频</el-button>
-    <el-row :gutter="16" class="list">
-      <el-col v-for="c in cameras" :key="c.id" :span="12" class="cell">
-        <el-card shadow="never">
-          <div class="row">
-            <div>
-              <b>{{ c.name }}</b>
-              <p>{{ c.location }}</p>
-              <small>{{ c.source }}</small>
-            </div>
-            <el-switch :model-value="c.enabled" disabled />
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+  <div v-loading="loading">
+    <div class="toolbar">
+      <el-button type="primary" @click="uploadVisible = true">上传本地视频</el-button>
+      <el-button @click="addVisible = true">添加手机 / RTSP 视频源</el-button>
+      <el-button @click="load">刷新</el-button>
+      <span class="hint">手机推流地址示例：http://192.168.43.1:8080/video（IP Webcam）</span>
+    </div>
 
-    <el-dialog v-model="uploadVisible" title="上传本地视频" width="480px">
+    <el-empty v-if="cameras.length === 0" description="暂无视频源" />
+    <el-table v-else :data="cameras" stripe>
+      <el-table-column prop="id" label="ID" width="70" />
+      <el-table-column prop="name" label="名称" width="180" />
+      <el-table-column prop="location" label="位置" width="160" />
+      <el-table-column label="类型" width="90">
+        <template #default="{ row }">
+          <el-tag effect="plain">{{ row.source_type }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="source" label="地址" min-width="240" show-overflow-tooltip />
+      <el-table-column label="在线" width="90">
+        <template #default="{ row }">
+          <el-tag :type="row.online ? 'success' : 'info'" size="small">{{ row.online ? '在线' : '离线' }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="启用" width="90">
+        <template #default="{ row }">
+          <el-tag :type="row.enabled ? 'success' : 'warning'" size="small" effect="plain">
+            {{ row.enabled ? '已启用' : '已停用' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="240">
+        <template #default="{ row }">
+          <el-button size="small" @click="preview(row)">预览</el-button>
+          <el-button size="small" @click="toggle(row)">{{ row.enabled ? '停用' : '启用' }}</el-button>
+          <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-dialog v-model="uploadVisible" title="上传本地视频（自动循环检测）" width="520px">
       <el-upload drag :auto-upload="false" :show-file-list="true" accept=".mp4,.mov" :http-request="uploadFile">
         <el-icon size="36"><Upload /></el-icon>
         <div>将 MP4/MOV 拖到此处，或点击选择文件</div>
       </el-upload>
+      <template #footer><span class="hint">上传后系统会自动创建视频源并开始检测</span></template>
+    </el-dialog>
+
+    <el-dialog v-model="addVisible" title="添加视频源" width="520px">
+      <el-form label-width="90px">
+        <el-form-item label="名称"><el-input v-model="form.name" placeholder="例如：手机摄像头-01" /></el-form-item>
+        <el-form-item label="位置"><el-input v-model="form.location" placeholder="例如：实验室 A 区" /></el-form-item>
+        <el-form-item label="类型">
+          <el-select v-model="form.source_type">
+            <el-option label="http（手机 IP Webcam）" value="http" />
+            <el-option label="rtsp（网络摄像头）" value="rtsp" />
+            <el-option label="file（本地路径）" value="file" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="视频地址">
+          <el-input v-model="form.source" placeholder="http://192.168.43.1:8080/video 或 rtsp://..." />
+        </el-form-item>
+        <el-form-item label="循环播放"><el-switch v-model="form.loop" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitCamera">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="previewVisible" :title="previewCamera ? `预览：${previewCamera.name}` : '预览'" width="720px">
+      <img v-if="previewCamera && previewCamera.enabled" :src="streamUrl(previewCamera.id)" style="width: 100%" />
+      <el-empty v-else description="该视频源已停用" />
     </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.list { margin-top: 16px; }
-.cell { margin-bottom: 16px; }
-.row { display: flex; justify-content: space-between; align-items: center; }
-.row p { margin: 4px 0; color: #7b8494; }
-.row small { color: #9aa2b0; }
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.hint { color: #9aa2b0; font-size: 12px; }
 </style>
