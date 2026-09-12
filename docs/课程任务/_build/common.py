@@ -19,6 +19,7 @@ SMALL_SIZE = Pt(9)
 ACCENT = RGBColor(0x1F, 0x4D, 0x78)
 HEADER_FILL = "1F4D78"
 ALT_FILL = "F2F5F9"
+USABLE_WIDTH_CM = 15.4
 
 
 def set_run_font(run, cjk: str = BODY_CJK, latin: str = LATIN, size=None, bold=None, color=None, italic=None):
@@ -229,6 +230,10 @@ def _set_cell_margins(table, top=60, bottom=60, start=100, end=100) -> None:
 
 
 def _set_table_widths(table, widths_cm: list[float]) -> None:
+    total_cm = sum(widths_cm)
+    if total_cm > USABLE_WIDTH_CM:
+        factor = USABLE_WIDTH_CM / total_cm
+        widths_cm = [round(w * factor, 3) for w in widths_cm]
     total_dxa = int(sum(widths_cm) * 567)
     tbl_pr = table._tbl.tblPr
     tbl_w = OxmlElement("w:tblW")
