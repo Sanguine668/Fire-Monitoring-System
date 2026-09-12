@@ -9,17 +9,13 @@ node_modules/
 dist/
 
 # 运行时数据
-FireGuard_AI_Demo_Windows/storage/*.db
-FireGuard_AI_Demo_Windows/storage/snapshots/*
 storage/*.db
 storage/uploads/*
 storage/snapshots/*
 
 # 数据集与权重（体积大，不入库）
-fire_detection/
 datasets/
 runs/
-ai/downloads/
 *.pt
 *.weights
 *.onnx
@@ -32,14 +28,6 @@ Thumbs.db
 # 测试与临时输出
 *.out
 
-# 课程材料中间产物
-docs/课程任务/_qa/
-docs/课程任务/_模板转换/
-docs/课程任务/数据集预览/thumbnails/
+# 对外提交包与本地归档（保留在本地，不进仓库）
 提交文档/
-
-# 本地归档中的大文件与临时产物（归档目录本身保留，其余按需忽略）
-archive/yolo26n.pt
-archive/_qa_渲染检查/
-archive/_临时输出/
-archive/**/storage/
+archive/

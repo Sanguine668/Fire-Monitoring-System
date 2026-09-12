@@ -208,7 +208,7 @@ normal ──smoke 置信度≥阈值──→ 疑似烟雾（streak 计数 +1�
 
 ### 7.2 约定
 
-- 视觉与交互参考现有 `archive/早期演示系统/FireGuard_AI_Demo_Windows/frontend`（不作为正式代码迁移）；
+- 视觉与交互参考早期原生演示页面（已清理，可在 Git 历史中查看），不作为正式代码迁移；
 - 组件化拆分：VideoCard、AlarmTable、CameraDialog、UploadDialog、SettingsForm、ChartPanel；
 - 开发期前端调用通过 Vite proxy 指向 FastAPI（默认 8000 端口）；
 - 演示构建：`npm run build` → FastAPI 托管 `dist/`，课堂一键启动。

@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - 运行环境：Node ≥ 20（本机实测 v24.15.0）、npm 11。
-- 新建目录必须为仓库根下 `frontend/`；不得修改 `archive/早期演示系统/FireGuard_AI_Demo_Windows/`（它仅作视觉参考）。
+- 新建目录必须为仓库根下 `frontend/`；不得引用已清理的早期原生演示代码（可在 Git 历史中查看）。
 - 路由统一使用 `createWebHashHistory`；五个页面路径：`/`、`/monitor`、`/alarms`、`/cameras`、`/settings`。
 - UI 文案使用简体中文；视觉基调参考 demo（深色侧栏 + 内容区）。
 - 接口契约（来自设计文档 4.4/4.5）：WebSocket 事件含 `detection`/`alarm`/`camera_online`/`camera_offline`；REST 路径以 `/api/...` 开头，实时画面流为 `GET /stream/{id}`。
