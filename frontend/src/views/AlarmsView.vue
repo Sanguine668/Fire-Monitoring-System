@@ -22,7 +22,7 @@ const busyKey = ref('')
 let typeChart = null
 let trendChart = null
 
-const filtered = computed(() => {
+const filteredRows = computed(() => {
   const key = keyword.value.trim().toLowerCase()
   return rows.value.filter((row) => {
     const statusOk = statusTab.value === 'all' || row.status === statusTab.value
@@ -31,8 +31,43 @@ const filtered = computed(() => {
   })
 })
 
-const criticalRows = computed(() => filtered.value.filter((r) => r.level === 'critical'))
-const warningRows = computed(() => filtered.value.filter((r) => r.level === 'warning'))
+/**
+ * 未处理的告警按"视频源 + 告警类型"合并为一条：
+ * 同一路视频源、同一位置的同类预警未处理时只显示最新一条，并记录累计次数与时间范围。
+ */
+const displayRows = computed(() => {
+  if (statusTab.value !== 'unhandled') {
+    return filteredRows.value.map((row) => ({ ...row, count: 1, firstAt: row.created_at, latestAt: row.created_at }))
+  }
+  const groups = new Map()
+  for (const row of filteredRows.value) {
+    const key = `${row.camera_id}:${row.alarm_type}`
+    const exist = groups.get(key)
+    if (!exist) {
+      groups.set(key, {
+        ...row,
+        count: row.count || 1,
+        firstAt: row.created_at,
+        latestAt: row.created_at,
+        maxConfidence: row.confidence
+      })
+      continue
+    }
+    exist.count += row.count || 1
+    if ((row.created_at || '') > (exist.latestAt || '')) {
+      exist.latestAt = row.created_at
+      exist.id = row.id
+      exist.confidence = row.confidence
+      exist.camera_name = row.camera_name
+    }
+    if ((row.created_at || '') < (exist.firstAt || '')) exist.firstAt = row.created_at
+    exist.maxConfidence = Math.max(exist.maxConfidence || 0, row.confidence || 0)
+  }
+  return [...groups.values()].sort((a, b) => (b.latestAt || '').localeCompare(a.latestAt || ''))
+})
+
+const criticalRows = computed(() => displayRows.value.filter((r) => r.level === 'critical'))
+const warningRows = computed(() => displayRows.value.filter((r) => r.level === 'warning'))
 
 function slice(list, pageRef) {
   const maxPage = Math.max(1, Math.ceil(list.length / PAGE_SIZE))
@@ -46,19 +81,27 @@ const pagedWarning = computed(() => slice(warningRows.value, pageWarning))
 
 const metrics = computed(() => {
   const today = new Date().toISOString().slice(0, 10)
+  const unhandledGroups = new Set(
+    rows.value.filter((r) => r.status === 'unhandled').map((r) => `${r.camera_id}:${r.alarm_type}`)
+  )
   return [
     { label: '今日告警', value: rows.value.filter((r) => (r.created_at || '').startsWith(today)).length, tone: '#1f4d78' },
     { label: '严重告警', value: rows.value.filter((r) => r.level === 'critical').length, tone: '#e5484d' },
-    { label: '待处理', value: rows.value.filter((r) => r.status === 'unhandled').length, tone: '#e6a23c' },
+    { label: '待处理事件（已合并）', value: unhandledGroups.size, tone: '#e6a23c' },
     { label: '已处理', value: rows.value.filter((r) => r.status === 'handled').length, tone: '#23a06b' }
   ]
 })
 
-const counts = computed(() => ({
-  all: rows.value.length,
-  unhandled: rows.value.filter((r) => r.status === 'unhandled').length,
-  handled: rows.value.filter((r) => r.status === 'handled').length
-}))
+const counts = computed(() => {
+  const unhandledGroups = new Set(
+    rows.value.filter((r) => r.status === 'unhandled').map((r) => `${r.camera_id}:${r.alarm_type}`)
+  )
+  return {
+    unhandled: unhandledGroups.size,
+    handled: rows.value.filter((r) => r.status === 'handled').length,
+    all: rows.value.length
+  }
+})
 
 async function load(showError = true) {
   loading.value = true
@@ -72,10 +115,20 @@ async function load(showError = true) {
 }
 
 async function ack(row) {
-  busyKey.value = `one-${row.id}`
+  busyKey.value = `one-${row.camera_id}-${row.alarm_type}`
   try {
-    await ElMessageBox.confirm(`确认处理告警 #${row.id}（${row.camera_name}）？`, '确认处理', { type: 'warning' })
-    await api.ackAlarm(row.id)
+    await ElMessageBox.confirm(
+      row.count > 1
+        ? `该视频源「${row.camera_name}」的${row.alarm_type === 'fire' ? '明火' : '烟雾'}告警共 ${row.count} 次，确认全部处理？`
+        : `确认处理告警 #${row.id}（${row.camera_name}）？`,
+      '确认处理',
+      { type: 'warning' }
+    )
+    if (row.count > 1 || statusTab.value === 'unhandled') {
+      await api.ackAlarmGroup({ camera_id: row.camera_id, alarm_type: row.alarm_type })
+    } else {
+      await api.ackAlarm(row.id)
+    }
     ElMessage.success('已确认处理')
     detailVisible.value = false
     await load(false)
@@ -92,11 +145,12 @@ async function ackGroup(level) {
     ElMessage.warning('该分组下没有待处理的告警')
     return
   }
+  const total = targets.reduce((sum, r) => sum + (r.count || 1), 0)
   busyKey.value = `group-${level}`
   try {
-    await ElMessageBox.confirm(`确认批量处理 ${targets.length} 条告警？`, '批量处理', { type: 'warning' })
-    await Promise.all(targets.map((r) => api.ackAlarm(r.id)))
-    ElMessage.success(`已处理 ${targets.length} 条告警`)
+    await ElMessageBox.confirm(`该分组共 ${total} 条告警（合并后 ${targets.length} 个事件），确认全部处理？`, '批量处理', { type: 'warning' })
+    await Promise.all(targets.map((r) => api.ackAlarmGroup({ camera_id: r.camera_id, alarm_type: r.alarm_type })))
+    ElMessage.success(`已处理 ${total} 条告警`)
     await load(false)
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(`批量处理失败：${error.message}`)
@@ -111,19 +165,20 @@ function openDetail(row) {
 }
 
 function exportCsv() {
-  if (filtered.value.length === 0) {
+  if (displayRows.value.length === 0) {
     ElMessage.warning('当前没有可导出的告警记录')
     return
   }
-  const header = ['ID', '时间', '视频源', '类型', '级别', '置信度', '状态']
-  const lines = filtered.value.map((r) =>
+  const header = ['时间(最新)', '视频源', '类型', '级别', '置信度', '累计次数', '首次出现', '状态']
+  const lines = displayRows.value.map((r) =>
     [
-      r.id,
-      r.created_at,
+      r.latestAt || r.created_at,
       r.camera_name,
       r.alarm_type === 'fire' ? '明火' : '烟雾',
       r.level === 'critical' ? '严重' : '预警',
-      ((r.confidence || 0) * 100).toFixed(1) + '%',
+      ((r.maxConfidence || r.confidence || 0) * 100).toFixed(1) + '%',
+      r.count || 1,
+      r.firstAt || r.created_at,
       r.status === 'handled' ? '已处理' : '待处理'
     ].join(',')
   )
@@ -134,7 +189,7 @@ function exportCsv() {
   link.download = `告警记录_${new Date().toISOString().slice(0, 10)}.csv`
   link.click()
   URL.revokeObjectURL(url)
-  ElMessage.success(`已导出 ${filtered.value.length} 条记录`)
+  ElMessage.success(`已导出 ${displayRows.value.length} 条记录`)
 }
 
 function renderCharts() {
@@ -208,6 +263,14 @@ onUnmounted(() => {
 
 <template>
   <div>
+    <el-alert
+      v-if="statusTab === 'unhandled'"
+      type="info"
+      :closable="false"
+      class="tip"
+      title="未处理的同类告警已按视频源合并为一条，处理后会从该列表移除。"
+    />
+
     <el-row :gutter="16" class="metrics">
       <el-col v-for="m in metrics" :key="m.label" :span="6">
         <el-card shadow="never" :body-style="{ padding: '14px 16px' }">
@@ -229,13 +292,7 @@ onUnmounted(() => {
                 <el-radio-button value="handled">已处理（{{ counts.handled }}）</el-radio-button>
                 <el-radio-button value="all">全部（{{ counts.all }}）</el-radio-button>
               </el-radio-group>
-              <el-input
-                v-model="keyword"
-                placeholder="按视频源搜索"
-                clearable
-                style="width: 180px"
-                :prefix-icon="Search"
-              />
+              <el-input v-model="keyword" placeholder="按视频源搜索" clearable style="width: 180px" :prefix-icon="Search" />
               <el-button :icon="Refresh" @click="load()">刷新</el-button>
               <el-button :icon="Download" @click="exportCsv">导出</el-button>
             </div>
@@ -247,7 +304,7 @@ onUnmounted(() => {
                 <div class="group-title">
                   <span class="dot critical" />
                   <b>严重告警（明火）</b>
-                  <el-tag type="danger" size="small" effect="plain">{{ criticalRows.length }} 条</el-tag>
+                  <el-tag type="danger" size="small" effect="plain">{{ criticalRows.length }} 个事件</el-tag>
                   <el-button
                     size="small"
                     type="danger"
@@ -261,11 +318,19 @@ onUnmounted(() => {
                 </div>
               </template>
               <el-table v-loading="loading" :data="pagedCritical" size="small" empty-text="暂无严重告警">
-                <el-table-column prop="created_at" label="时间" width="170" />
-                <el-table-column prop="camera_name" label="视频源" min-width="140" show-overflow-tooltip />
-                <el-table-column label="置信度" width="180">
+                <el-table-column label="最近出现" width="170">
+                  <template #default="{ row }">{{ row.latestAt || row.created_at }}</template>
+                </el-table-column>
+                <el-table-column prop="camera_name" label="视频源" min-width="150" show-overflow-tooltip />
+                <el-table-column label="累计次数" width="100">
                   <template #default="{ row }">
-                    <el-progress :percentage="Math.round((row.confidence || 0) * 100)" :stroke-width="8" color="#e5484d" />
+                    <el-tag v-if="row.count > 1" type="danger" size="small" effect="plain">{{ row.count }} 次</el-tag>
+                    <span v-else>1 次</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="最高置信度" width="170">
+                  <template #default="{ row }">
+                    <el-progress :percentage="Math.round((row.maxConfidence || row.confidence || 0) * 100)" :stroke-width="8" color="#e5484d" />
                   </template>
                 </el-table-column>
                 <el-table-column label="操作" width="150" fixed="right">
@@ -275,7 +340,7 @@ onUnmounted(() => {
                       v-if="row.status === 'unhandled'"
                       size="small"
                       type="primary"
-                      :loading="busyKey === `one-${row.id}`"
+                      :loading="busyKey === `one-${row.camera_id}-${row.alarm_type}`"
                       @click="ack(row)"
                     >
                       确认
@@ -300,7 +365,7 @@ onUnmounted(() => {
                 <div class="group-title">
                   <span class="dot warning" />
                   <b>预警（烟雾）</b>
-                  <el-tag type="warning" size="small" effect="plain">{{ warningRows.length }} 条</el-tag>
+                  <el-tag type="warning" size="small" effect="plain">{{ warningRows.length }} 个事件</el-tag>
                   <el-button
                     size="small"
                     type="warning"
@@ -314,11 +379,19 @@ onUnmounted(() => {
                 </div>
               </template>
               <el-table v-loading="loading" :data="pagedWarning" size="small" empty-text="暂无预警记录">
-                <el-table-column prop="created_at" label="时间" width="170" />
-                <el-table-column prop="camera_name" label="视频源" min-width="140" show-overflow-tooltip />
-                <el-table-column label="置信度" width="180">
+                <el-table-column label="最近出现" width="170">
+                  <template #default="{ row }">{{ row.latestAt || row.created_at }}</template>
+                </el-table-column>
+                <el-table-column prop="camera_name" label="视频源" min-width="150" show-overflow-tooltip />
+                <el-table-column label="累计次数" width="100">
                   <template #default="{ row }">
-                    <el-progress :percentage="Math.round((row.confidence || 0) * 100)" :stroke-width="8" color="#e6a23c" />
+                    <el-tag v-if="row.count > 1" type="warning" size="small" effect="plain">{{ row.count }} 次</el-tag>
+                    <span v-else>1 次</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="最高置信度" width="170">
+                  <template #default="{ row }">
+                    <el-progress :percentage="Math.round((row.maxConfidence || row.confidence || 0) * 100)" :stroke-width="8" color="#e6a23c" />
                   </template>
                 </el-table-column>
                 <el-table-column label="操作" width="150" fixed="right">
@@ -328,7 +401,7 @@ onUnmounted(() => {
                       v-if="row.status === 'unhandled'"
                       size="small"
                       type="primary"
-                      :loading="busyKey === `one-${row.id}`"
+                      :loading="busyKey === `one-${row.camera_id}-${row.alarm_type}`"
                       @click="ack(row)"
                     >
                       确认
@@ -363,14 +436,17 @@ onUnmounted(() => {
       </el-col>
     </el-row>
 
-    <el-drawer v-model="detailVisible" title="告警详情" size="400px">
+    <el-drawer v-model="detailVisible" title="告警详情" size="420px">
       <el-descriptions v-if="detail" :column="1" border>
-        <el-descriptions-item label="告警编号">{{ detail.id }}</el-descriptions-item>
-        <el-descriptions-item label="发生时间">{{ detail.created_at }}</el-descriptions-item>
         <el-descriptions-item label="视频源">{{ detail.camera_name }}</el-descriptions-item>
         <el-descriptions-item label="告警类型">{{ detail.alarm_type === 'fire' ? '明火' : '烟雾' }}</el-descriptions-item>
         <el-descriptions-item label="告警级别">{{ detail.level === 'critical' ? '严重（红色）' : '预警（黄色）' }}</el-descriptions-item>
-        <el-descriptions-item label="置信度">{{ ((detail.confidence || 0) * 100).toFixed(1) }}%</el-descriptions-item>
+        <el-descriptions-item label="累计出现次数">{{ detail.count || 1 }} 次</el-descriptions-item>
+        <el-descriptions-item label="首次出现">{{ detail.firstAt || detail.created_at }}</el-descriptions-item>
+        <el-descriptions-item label="最近出现">{{ detail.latestAt || detail.created_at }}</el-descriptions-item>
+        <el-descriptions-item label="最高置信度">
+          {{ ((detail.maxConfidence || detail.confidence || 0) * 100).toFixed(1) }}%
+        </el-descriptions-item>
         <el-descriptions-item label="处理状态">{{ detail.status === 'handled' ? '已处理' : '待处理' }}</el-descriptions-item>
       </el-descriptions>
       <template #footer>
@@ -378,7 +454,7 @@ onUnmounted(() => {
         <el-button
           v-if="detail && detail.status === 'unhandled'"
           type="primary"
-          :loading="busyKey === `one-${detail.id}`"
+          :loading="busyKey === `one-${detail.camera_id}-${detail.alarm_type}`"
           @click="ack(detail)"
         >
           确认处理
@@ -389,6 +465,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.tip { margin-bottom: 12px; }
 .metrics { margin-bottom: 16px; }
 .metric { display: flex; justify-content: space-between; align-items: center; }
 .metric span { color: #7b8494; font-size: 13px; }

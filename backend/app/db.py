@@ -42,7 +42,9 @@ def init_db() -> None:
                 level TEXT NOT NULL,
                 confidence REAL NOT NULL,
                 created_at TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'unhandled'
+                status TEXT NOT NULL DEFAULT 'unhandled',
+                count INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT
             );
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -57,6 +59,11 @@ def init_db() -> None:
             "alarm_cooldown": "8",
         }.items():
             c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (k, v))
+        columns = {r["name"] for r in c.execute("PRAGMA table_info(alarms)").fetchall()}
+        if "count" not in columns:
+            c.execute("ALTER TABLE alarms ADD COLUMN count INTEGER NOT NULL DEFAULT 1")
+        if "updated_at" not in columns:
+            c.execute("ALTER TABLE alarms ADD COLUMN updated_at TEXT")
 
 
 def insert_camera(name: str, source_type: str, source: str, location: str = "", loop: int = 1) -> int:
@@ -96,12 +103,33 @@ def delete_camera(camera_id: int) -> None:
 
 
 def create_alarm(camera_id: int, camera_name: str, alarm_type: str, level: str, confidence: float) -> dict[str, Any]:
+    """创建告警；若同一视频源+同一类型已有未处理告警，则合并更新并累计次数。"""
     with _conn() as c:
         created = now_text()
+        exist = c.execute(
+            "SELECT * FROM alarms WHERE camera_id=? AND alarm_type=? AND status='unhandled' ORDER BY id DESC LIMIT 1",
+            (camera_id, alarm_type),
+        ).fetchone()
+        if exist:
+            count = int(exist["count"] or 1) + 1
+            c.execute(
+                "UPDATE alarms SET confidence=?, created_at=?, updated_at=?, count=? WHERE id=?",
+                (round(confidence, 3), created, created, count, exist["id"]),
+            )
+            merged = dict(exist)
+            merged.update(
+                {
+                    "confidence": round(confidence, 3),
+                    "created_at": created,
+                    "updated_at": created,
+                    "count": count,
+                }
+            )
+            return merged
         cur = c.execute(
-            "INSERT INTO alarms(camera_id,camera_name,alarm_type,level,confidence,created_at,status)"
-            " VALUES(?,?,?,?,?,?,'unhandled')",
-            (camera_id, camera_name, alarm_type, level, confidence, created),
+            "INSERT INTO alarms(camera_id,camera_name,alarm_type,level,confidence,created_at,status,count,updated_at)"
+            " VALUES(?,?,?,?,?,?,'unhandled',1,?)",
+            (camera_id, camera_name, alarm_type, level, confidence, created, created),
         )
         return {
             "id": int(cur.lastrowid),
@@ -111,6 +139,8 @@ def create_alarm(camera_id: int, camera_name: str, alarm_type: str, level: str, 
             "level": level,
             "confidence": round(confidence, 3),
             "created_at": created,
+            "updated_at": created,
+            "count": 1,
             "status": "unhandled",
         }
 
@@ -124,6 +154,16 @@ def ack_alarm(alarm_id: int) -> bool:
     with _conn() as c:
         cur = c.execute("UPDATE alarms SET status='handled' WHERE id=? AND status='unhandled'", (alarm_id,))
         return cur.rowcount > 0
+
+
+def ack_alarm_group(camera_id: int, alarm_type: str) -> int:
+    """把同一视频源、同一类型的所有未处理告警一次性标记为已处理，返回处理条数。"""
+    with _conn() as c:
+        cur = c.execute(
+            "UPDATE alarms SET status='handled' WHERE camera_id=? AND alarm_type=? AND status='unhandled'",
+            (camera_id, alarm_type),
+        )
+        return cur.rowcount
 
 
 def get_settings() -> dict[str, float | int]:
