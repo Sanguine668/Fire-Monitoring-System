@@ -33,6 +33,7 @@ export const api = {
   },
   alarms: (limit = 200) => request(`/api/alarms?limit=${limit}`),
   ackAlarm: (id) => request(`/api/alarms/${id}/ack`, { method: 'POST' }),
+  ackAlarmGroup: (payload) => request('/api/alarms/ack_group', { method: 'POST', body: JSON.stringify(payload) }),
   dashboard: () => request('/api/dashboard'),
   settings: () => request('/api/settings'),
   saveSettings: (payload) => request('/api/settings', { method: 'PUT', body: JSON.stringify(payload) })

@@ -35,6 +35,11 @@ class SettingsPayload(BaseModel):
     alarm_cooldown: int = Field(ge=1, le=120)
 
 
+class AckGroupPayload(BaseModel):
+    camera_id: int
+    alarm_type: str = Field(pattern="^(fire|smoke)$")
+
+
 class CameraRegistry:
     def __init__(self) -> None:
         self.workers: dict[int, DetectionWorker] = {}
@@ -139,6 +144,13 @@ def create_app() -> FastAPI:
         if not db.ack_alarm(alarm_id):
             raise HTTPException(404, "alarm not found or already handled")
         return {"ok": True, "id": alarm_id}
+
+    @app.post("/api/alarms/ack_group")
+    def ack_group(payload: AckGroupPayload) -> dict[str, Any]:
+        count = db.ack_alarm_group(payload.camera_id, payload.alarm_type)
+        if count == 0:
+            raise HTTPException(404, "no unhandled alarm found for this camera and type")
+        return {"ok": True, "handled": count}
 
     @app.get("/api/settings")
     def settings() -> dict[str, Any]:
