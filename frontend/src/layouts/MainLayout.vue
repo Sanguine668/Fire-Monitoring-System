@@ -16,6 +16,7 @@ const activeMenu = computed(() => route.name)
 const menus = [
   { name: 'dashboard', label: '监控总览', icon: 'Odometer' },
   { name: 'monitor', label: '实时监控', icon: 'VideoCamera' },
+  { name: 'phone', label: '手机接入向导', icon: 'Iphone' },
   { name: 'alarms', label: '告警中心', icon: 'Bell' },
   { name: 'cameras', label: '视频源管理', icon: 'Monitor' },
   { name: 'settings', label: '系统设置', icon: 'Setting' }

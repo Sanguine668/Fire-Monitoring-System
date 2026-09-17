@@ -11,6 +11,10 @@ from .alarm_engine import AlarmEngine
 from .config import DEFAULT_FPS, FRAME_QUALITY
 from .detector import draw_detections
 from .events import WsManager
+from .sources import is_network_source, open_capture
+
+NETWORK_RETRY_CAP = 10.0
+FILE_RETRY_CAP = 60.0
 
 
 class DetectionWorker(threading.Thread):
@@ -40,15 +44,16 @@ class DetectionWorker(threading.Thread):
 
     def run(self) -> None:
         retries = 0
+        retry_cap = NETWORK_RETRY_CAP if is_network_source(self.camera["source"]) else FILE_RETRY_CAP
         while not self._stop.is_set():
-            cap = cv2.VideoCapture(self.camera["source"])
+            cap = open_capture(self.camera["source"])
             if not cap.isOpened():
                 retries += 1
                 if self.camera["online"]:
                     db.set_camera_online(self.camera_id, False)
                     self.camera["online"] = 0
                     self._send({"event": "camera_offline", "camera_id": self.camera_id})
-                time.sleep(min(60, 1 << min(retries, 6)))
+                time.sleep(min(retry_cap, float(1 << min(retries, 6))))
                 continue
             retries = 0
             if not self.camera["online"]:

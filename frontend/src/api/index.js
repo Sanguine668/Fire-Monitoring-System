@@ -22,6 +22,8 @@ async function request(url, options = {}) {
 
 export const api = {
   health: () => request('/api/health'),
+  network: () => request('/api/network'),
+  probe: (payload) => request('/api/probe', { method: 'POST', body: JSON.stringify(payload) }),
   cameras: () => request('/api/cameras'),
   addCamera: (payload) => request('/api/cameras', { method: 'POST', body: JSON.stringify(payload) }),
   toggleCamera: (id) => request(`/api/cameras/${id}/toggle`, { method: 'POST' }),

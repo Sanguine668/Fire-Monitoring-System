@@ -40,6 +40,10 @@ class AckGroupPayload(BaseModel):
     alarm_type: str = Field(pattern="^(fire|smoke)$")
 
 
+class ProbePayload(BaseModel):
+    source: str = Field(min_length=1)
+
+
 class CameraRegistry:
     def __init__(self) -> None:
         self.workers: dict[int, DetectionWorker] = {}
@@ -89,6 +93,73 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, Any]:
         return {"status": "ok", "service": "FireGuard AI", "time": db.now_text()}
+
+    @app.get("/api/network")
+    def network_info() -> dict[str, Any]:
+        """返回本机局域网地址，供手机接入向导展示。"""
+        import socket
+
+        import psutil
+
+        addresses: list[dict[str, str]] = []
+        for name, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                if addr.family != socket.AF_INET:
+                    continue
+                ip = addr.address
+                # 排除回环与 169.254 自动专用地址（没连上网络时才出现的无效地址）
+                if ip.startswith("127.") or ip.startswith("169.254."):
+                    continue
+                addresses.append({"interface": name, "ip": ip})
+
+        def rank(item: dict[str, str]) -> int:
+            prefix = item["ip"].split(".")[0]
+            # 手机热点网段通常是 192.168.*，其次是 10.*、172.16-31.*
+            return {"192": 0, "10": 1, "172": 2}.get(prefix, 3)
+
+        addresses.sort(key=rank)
+        preferred = addresses[0]["ip"] if addresses else ""
+        return {
+            "addresses": addresses,
+            "preferred": preferred,
+            "dashboard_url": f"http://{preferred}:8000" if preferred else "",
+        }
+
+    @app.post("/api/probe")
+    def probe_source(payload: ProbePayload) -> dict[str, Any]:
+        """试连视频源（手机推流地址或本地文件），返回是否可用与画面尺寸。"""
+        import threading
+
+        from .sources import open_capture
+
+        result: dict[str, Any] = {"ok": False, "message": ""}
+        source = payload.source.strip()
+
+        def work() -> None:
+            cap = None
+            try:
+                cap = open_capture(source)
+                if not cap.isOpened():
+                    result["message"] = "无法打开该地址：不可达或格式不支持（请确认手机与电脑在同一网络）"
+                    return
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    result["message"] = "已连通但读不到画面：请确认 IP Webcam 已点 Start server，且地址以 /video 结尾"
+                    return
+                height, width = frame.shape[:2]
+                result.update(ok=True, width=width, height=height, message=f"连接成功，画面 {width}×{height}")
+            except Exception as exc:  # noqa: BLE001
+                result["message"] = f"探测异常：{exc}"
+            finally:
+                if cap is not None:
+                    cap.release()
+
+        worker = threading.Thread(target=work, daemon=True)
+        worker.start()
+        worker.join(8)
+        if worker.is_alive():
+            result["message"] = "连接超时（8 秒），请检查网络与地址"
+        return result
 
     @app.get("/api/cameras")
     def cameras() -> list[dict[str, Any]]:

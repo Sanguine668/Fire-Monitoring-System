@@ -11,7 +11,7 @@
 | 目录 | 内容 | 说明 |
 | --- | --- | --- |
 | `backend/` | FastAPI 后端 | 视频源管理、检测 worker、告警引擎、REST/WebSocket/MJPEG 接口 |
-| `frontend/` | Vue3 前端 | 监控总览、实时监控、告警中心、视频源管理、系统设置 |
+| `frontend/` | Vue3 前端 | 监控总览、实时监控、手机接入向导、告警中心、视频源管理、系统设置 |
 | `ai/` | 模型训练环境与产物 | `ai/.venv` 训练环境、`ai/runs/` 训练输出（不入库） |
 | `scripts/` | 辅助脚本 | VOC 转 YOLO、数据体检、训练入口、演示视频生成 |
 | `docs/课程任务/` | 课程交付材料 | 分工、项目介绍、参考材料、数据报告，见下方索引 |
@@ -26,12 +26,15 @@
 ### 1. 后端（检测服务）
 
 ```powershell
-ai\.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+$env:FIREGUARD_DEVICE = '0'   # 用第 0 号 GPU 推理；不设则自动判断
+ai\.venv\Scripts\python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 ```
 
+- `--host 0.0.0.0` 是手机接入的前提，否则手机访问不到电脑；
 - 模型默认路径：`ai/runs/fire26n/weights/best.pt`
 - 接口文档：http://127.0.0.1:8000/docs
-- 主要接口：`/api/health`、`/api/cameras`、`/api/uploads`、`/api/alarms`、`/api/settings`、`/api/dashboard`、`/stream/{id}`、`/ws/events`
+- 主要接口：`/api/health`、`/api/network`、`/api/probe`、`/api/cameras`、`/api/uploads`、`/api/alarms`、`/api/settings`、`/api/dashboard`、`/stream/{id}`、`/ws/events`
+- 注意：本机 CPU 推理会因线程/内存限制报错，演示与调试请使用 GPU（`FIREGUARD_DEVICE=0`）
 
 ### 2. 前端（监控页面）
 
@@ -43,7 +46,18 @@ npm run dev
 
 浏览器访问 http://localhost:5173 （开发期已配置代理到后端 8000 端口）。
 
-### 3. 模型训练与数据
+### 3. 手机摄像头接入（IP Webcam）
+
+页面入口：左侧菜单「手机接入向导」（http://localhost:5173/#/phone），四步走完即可：
+
+1. 网络准备：手机开热点 → 电脑连入该热点（或两者连同一 WiFi），页面会列出本机可用的局域网地址并标出推荐项；
+2. 手机端：安装 IP Webcam → 分辨率建议 640×480、格式 MJPEG → 滑到底部点 `Start server`；
+3. 填写地址：只填 `192.168.43.1` 会自动补成 `http://192.168.43.1:8080/video`，点「测试连接」确认能取到画面；
+4. 保存为视频源：进入「实时监控」即可看到手机画面与检测框。
+
+常见问题：探测超时通常是手机没点 `Start server`，或电脑连的不是手机热点；添加后显示离线时系统会自动重连（2 秒起、最长 10 秒）。
+
+### 4. 模型训练与数据
 
 ```powershell
 ai\.venv\Scripts\python scripts\inspect_voc.py       # 数据集类别统计
@@ -60,7 +74,7 @@ ai\.venv\Scripts\python scripts\train_yolo.py        # 启动训练（默认 YOL
 | 任务3 | 需求规格说明书（非功能性需求部分已完成，功能需求等章节待合并） | `docs/课程任务/任务3-需求规格说明书/`（docx + md 两种格式） |
 | 任务4 | 工作任务分解说明书（含 WBS 树状图与 Project 截图） | 文字部分：`工作任务分解模式与分解库.md`；工作包 Word 表格：`工作任务分解库（工作包明细表）.docx`；配套 Project 任务清单 md/csv 与 项目任务分解.mpp |
 | 支撑材料 | 分工与过程记录、统一参考材料、图表说明、数据集说明、数据质量报告 | `docs/课程任务/` |
-| 组员材料包 | 打包分发给组员 | `提交文档/组员写作材料包_v1.4.zip`（本地） |
+| 组员材料包 | 打包分发给组员 | `提交文档/组员写作材料包_v1.6.zip`（本地） |
 
 ## 协作方式
 
