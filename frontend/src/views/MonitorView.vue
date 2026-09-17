@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { VideoCamera, Grid, Refresh, SwitchButton } from '@element-plus/icons-vue'
+import { VideoCamera, Grid, Refresh, SwitchButton, FullScreen } from '@element-plus/icons-vue'
 import { api, streamUrl } from '../api'
 import { useRealtime } from '../composables/useRealtime'
 
@@ -11,6 +11,7 @@ const loading = ref(false)
 const viewMode = ref('grid')
 const selectedId = ref(null)
 const togglingId = ref(null)
+const maximized = ref(false)
 let timer = null
 
 const enabledCameras = computed(() => cameras.value.filter((c) => c.enabled))
@@ -77,7 +78,7 @@ onUnmounted(() => clearInterval(timer))
     <!-- 焦点模式 -->
     <template v-else-if="viewMode === 'focus'">
       <el-card shadow="never" :body-style="{ padding: '0' }" class="focus-card">
-        <div class="stage focus-stage">
+        <div class="stage focus-stage" :class="{ maximized }">
           <template v-if="selected && selected.enabled">
             <img :src="streamUrl(selected.id)" class="frame" :alt="selected.name" />
             <div class="overlay">
@@ -101,6 +102,9 @@ onUnmounted(() => clearInterval(timer))
             @click="toggle(selected)"
           >
             {{ selected.enabled ? '停用' : '启用' }}
+          </el-button>
+          <el-button :icon="FullScreen" @click="maximized = !maximized">
+            {{ maximized ? '还原' : '放大' }}
           </el-button>
         </div>
       </el-card>
@@ -161,7 +165,8 @@ onUnmounted(() => clearInterval(timer))
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 .hint { color: #9aa2b0; font-size: 12px; margin-right: auto; }
 .stage { height: 260px; background: #10131a; color: #fff; position: relative; overflow: hidden; cursor: pointer; }
-.focus-stage { height: 460px; }
+.focus-stage { height: clamp(380px, calc(100vh - 380px), 780px); }
+.focus-stage.maximized { height: calc(100vh - 150px); }
 .frame { width: 100%; height: 100%; object-fit: contain; display: block; }
 .tag { position: absolute; top: 8px; left: 8px; z-index: 2; }
 .tag-right { position: absolute; top: 8px; right: 8px; z-index: 2; }
@@ -176,7 +181,7 @@ onUnmounted(() => clearInterval(timer))
 .focus-card { margin-bottom: 14px; }
 .thumbs { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
 .thumb {
-  width: 180px; flex: 0 0 auto; border: 2px solid transparent; border-radius: 6px; overflow: hidden;
+  width: 168px; flex: 0 0 auto; border: 2px solid transparent; border-radius: 6px; overflow: hidden;
   background: #fff; cursor: pointer; box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
 }
 .thumb.active { border-color: #1f4d78; }
