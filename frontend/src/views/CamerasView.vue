@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
 import { api, streamUrl } from '../api'
@@ -10,7 +10,21 @@ const uploadVisible = ref(false)
 const addVisible = ref(false)
 const previewVisible = ref(false)
 const previewCamera = ref(null)
+const previewAnnotated = ref(true)
+const keyword = ref('')
+const busyId = ref(null)
 const form = reactive({ name: '', location: '', source_type: 'http', source: '', loop: true })
+
+const filteredCameras = computed(() => {
+  const key = keyword.value.trim().toLowerCase()
+  if (!key) return cameras.value
+  return cameras.value.filter(
+    (c) =>
+      (c.name || '').toLowerCase().includes(key) ||
+      (c.location || '').toLowerCase().includes(key) ||
+      (c.source || '').toLowerCase().includes(key)
+  )
+})
 
 async function load() {
   loading.value = true
@@ -51,15 +65,20 @@ async function submitCamera() {
 }
 
 async function toggle(camera) {
+  busyId.value = camera.id
   try {
     await api.toggleCamera(camera.id)
+    ElMessage.success(camera.enabled ? `已停用「${camera.name}」` : `已启用「${camera.name}」`)
     await load()
   } catch (error) {
     ElMessage.error(`操作失败：${error.message}`)
+  } finally {
+    busyId.value = null
   }
 }
 
 async function remove(camera) {
+  busyId.value = camera.id
   try {
     await ElMessageBox.confirm(`确定删除视频源「${camera.name}」？`, '删除确认', { type: 'warning' })
     await api.deleteCamera(camera.id)
@@ -67,6 +86,8 @@ async function remove(camera) {
     await load()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(`删除失败：${error.message}`)
+  } finally {
+    busyId.value = null
   }
 }
 
@@ -84,11 +105,12 @@ onMounted(load)
       <el-button type="primary" @click="uploadVisible = true">上传本地视频</el-button>
       <el-button @click="addVisible = true">添加手机 / RTSP 视频源</el-button>
       <el-button @click="load">刷新</el-button>
+      <el-input v-model="keyword" placeholder="按名称 / 位置 / 地址搜索" clearable style="width: 240px" />
       <span class="hint">手机推流地址示例：http://192.168.43.1:8080/video（IP Webcam）</span>
     </div>
 
-    <el-empty v-if="cameras.length === 0" description="暂无视频源" />
-    <el-table v-else :data="cameras" stripe>
+    <el-empty v-if="filteredCameras.length === 0" :description="cameras.length === 0 ? '暂无视频源' : '没有匹配的视频源'" />
+    <el-table v-else :data="filteredCameras" stripe>
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="name" label="名称" width="180" />
       <el-table-column prop="location" label="位置" width="160" />
@@ -113,8 +135,8 @@ onMounted(load)
       <el-table-column label="操作" width="240">
         <template #default="{ row }">
           <el-button size="small" @click="preview(row)">预览</el-button>
-          <el-button size="small" @click="toggle(row)">{{ row.enabled ? '停用' : '启用' }}</el-button>
-          <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
+          <el-button size="small" :loading="busyId === row.id" @click="toggle(row)">{{ row.enabled ? '停用' : '启用' }}</el-button>
+          <el-button size="small" type="danger" :loading="busyId === row.id" @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -124,7 +146,10 @@ onMounted(load)
         <el-icon size="36"><Upload /></el-icon>
         <div>将 MP4/MOV 拖到此处，或点击选择文件</div>
       </el-upload>
-      <template #footer><span class="hint">上传后系统会自动创建视频源并开始检测</span></template>
+      <template #footer>
+        <span class="hint">上传后系统会自动创建视频源并开始检测</span>
+        <el-button @click="uploadVisible = false">关闭</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="addVisible" title="添加视频源" width="520px">
@@ -149,8 +174,15 @@ onMounted(load)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="previewVisible" :title="previewCamera ? `预览：${previewCamera.name}` : '预览'" width="720px">
-      <img v-if="previewCamera && previewCamera.enabled" :src="streamUrl(previewCamera.id)" style="width: 100%" />
+    <el-dialog v-model="previewVisible" :title="previewCamera ? `预览：${previewCamera.name}` : '预览'" width="760px">
+      <div class="preview-tools">
+        <el-switch v-model="previewAnnotated" active-text="显示检测框" inactive-text="原始画面" />
+      </div>
+      <img
+        v-if="previewCamera && previewCamera.enabled"
+        :src="streamUrl(previewCamera.id, previewAnnotated)"
+        style="width: 100%"
+      />
       <el-empty v-else description="该视频源已停用" />
     </el-dialog>
   </div>
@@ -159,4 +191,5 @@ onMounted(load)
 <style scoped>
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .hint { color: #9aa2b0; font-size: 12px; }
+.preview-tools { margin-bottom: 10px; }
 </style>

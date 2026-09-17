@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Refresh } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { api } from '../api'
 import { useRealtime } from '../composables/useRealtime'
@@ -83,6 +84,10 @@ onUnmounted(() => {
 
 <template>
   <div v-loading="loading" class="dashboard">
+    <div class="toolbar">
+      <el-button :icon="Refresh" @click="load">刷新</el-button>
+      <span class="hint">数据每 15 秒自动刷新，收到新告警时立即刷新</span>
+    </div>
     <el-row :gutter="16">
       <el-col v-for="m in metrics" :key="m.label" :span="6">
         <el-card shadow="never">
@@ -119,6 +124,8 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.hint { color: #9aa2b0; font-size: 12px; }
 .metric span { color: #7b8494; }
 .metric strong { display: block; font-size: 26px; margin-top: 6px; }
 .metric small { font-size: 13px; color: #9aa2b0; margin-left: 4px; font-weight: 400; }

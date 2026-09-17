@@ -38,4 +38,4 @@ export const api = {
   saveSettings: (payload) => request('/api/settings', { method: 'PUT', body: JSON.stringify(payload) })
 }
 
-export const streamUrl = (cameraId) => `/stream/${cameraId}`
+export const streamUrl = (cameraId, annotated = true) => `/stream/${cameraId}${annotated ? '' : '?annotated=false'}`

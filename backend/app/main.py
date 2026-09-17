@@ -153,7 +153,7 @@ def create_app() -> FastAPI:
         return db.dashboard_stats()
 
     @app.get("/stream/{camera_id}")
-    async def stream(camera_id: int, reg: CameraRegistry = Depends(registry)):
+    async def stream(camera_id: int, annotated: bool = True, reg: CameraRegistry = Depends(registry)):
         w = reg.workers.get(camera_id)
         if not w:
             raise HTTPException(404, "worker not running")
@@ -161,7 +161,7 @@ def create_app() -> FastAPI:
         async def gen():
             deadline = time.time() + 30
             while True:
-                frame = w.latest_jpeg
+                frame = w.latest_jpeg if annotated else w.latest_raw_jpeg
                 if frame:
                     yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
                     deadline = time.time() + 30

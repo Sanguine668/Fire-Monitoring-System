@@ -29,6 +29,7 @@ class DetectionWorker(threading.Thread):
         self.settings_provider = settings_provider
         self._stop = threading.Event()
         self.latest_jpeg: bytes | None = None
+        self.latest_raw_jpeg: bytes | None = None
         self.engine = AlarmEngine()
 
     def stop(self) -> None:
@@ -76,6 +77,9 @@ class DetectionWorker(threading.Thread):
                     int(s["continuous_frames"]),
                     float(s["alarm_cooldown"]),
                 )
+                ok_raw, raw_buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), FRAME_QUALITY])
+                if ok_raw:
+                    self.latest_raw_jpeg = raw_buf.tobytes()
                 visible = [
                     d
                     for d in objects

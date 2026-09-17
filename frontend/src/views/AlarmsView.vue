@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Download, Refresh } from '@element-plus/icons-vue'
 import { api } from '../api'
 import { useRealtime } from '../composables/useRealtime'
 
@@ -38,6 +39,33 @@ async function ack(row) {
   }
 }
 
+function exportCsv() {
+  if (filtered.value.length === 0) {
+    ElMessage.warning('当前没有可导出的告警记录')
+    return
+  }
+  const header = ['ID', '时间', '视频源', '类型', '级别', '置信度', '状态']
+  const lines = filtered.value.map((r) =>
+    [
+      r.id,
+      r.created_at,
+      r.camera_name,
+      r.alarm_type === 'fire' ? '明火' : '烟雾',
+      r.level === 'critical' ? '严重' : '预警',
+      ((r.confidence || 0) * 100).toFixed(1) + '%',
+      r.status === 'handled' ? '已处理' : '待处理'
+    ].join(',')
+  )
+  const csv = '\uFEFF' + [header.join(','), ...lines].join('\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `告警记录_${new Date().toISOString().slice(0, 10)}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success(`已导出 ${filtered.value.length} 条记录`)
+}
+
 watch(() => realtime.lastAlarm, (alarm) => {
   if (alarm) load()
 })
@@ -56,7 +84,8 @@ onMounted(load)
         <el-option label="待处理" value="unhandled" />
         <el-option label="已处理" value="handled" />
       </el-select>
-      <el-button @click="load">刷新</el-button>
+      <el-button :icon="Refresh" @click="load">刷新</el-button>
+      <el-button :icon="Download" @click="exportCsv">导出 CSV</el-button>
       <span class="count">共 {{ filtered.length }} 条</span>
     </div>
 
