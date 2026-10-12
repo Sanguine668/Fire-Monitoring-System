@@ -190,6 +190,21 @@ def convert(md_path: Path, docx_path: Path) -> None:
         raw = lines[idx]
         line = raw.strip()
 
+        img = re.match(r"^!\[(?P<alt>[^\]]*)\]\((?P<src>[^)]+)\)$", line)
+        if img:
+            src = (md_path.parent / img.group("src")).resolve()
+            alt = img.group("alt").strip()
+            if src.is_file():
+                para = doc.add_paragraph()
+                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                para.paragraph_format.first_line_indent = Cm(0)
+                para.add_run().add_picture(str(src), width=Cm(15.0))
+                caption(doc, alt)
+            else:
+                body_paragraph(doc, f"（图片缺失：{img.group('src')}）", indent=False)
+            idx += 1
+            continue
+
         if line.startswith("```"):
             if in_code:
                 code_block(doc, code_lines)
