@@ -52,6 +52,10 @@ function detectionOf(id) {
   return realtime.detections[id] || null
 }
 
+function countType(id, type) {
+  return (detectionOf(id)?.objects || []).filter((o) => o.type === type).length
+}
+
 onMounted(() => {
   loading.value = true
   load(true).finally(() => {
@@ -83,9 +87,10 @@ onUnmounted(() => clearInterval(timer))
             <img :src="streamUrl(selected.id)" class="frame" :alt="selected.name" />
             <div class="overlay">
               <span>{{ selected.name }}</span>
-              <span v-if="detectionOf(selected.id)">目标 {{ (detectionOf(selected.id).objects || []).length }}</span>
+              <span v-if="detectionOf(selected.id)">火 {{ countType(selected.id, 'fire') }} / 烟 {{ countType(selected.id, 'smoke') }}</span>
               <span v-if="detectionOf(selected.id)">风险 {{ detectionOf(selected.id).risk_score }}</span>
               <span v-if="detectionOf(selected.id)">{{ detectionOf(selected.id).fps }} FPS</span>
+              <span v-if="detectionOf(selected.id)?.tiled" class="tiled">远距离扫描</span>
             </div>
           </template>
           <div v-else class="placeholder">暂无可用的启用视频源</div>
@@ -136,9 +141,10 @@ onUnmounted(() => clearInterval(timer))
             <img v-if="c.enabled" :src="streamUrl(c.id)" class="frame" :alt="c.name" />
             <div v-else class="placeholder">视频源已停用</div>
             <div v-if="detectionOf(c.id)" class="overlay">
-              <span>目标 {{ (detectionOf(c.id).objects || []).length }}</span>
+              <span>火 {{ countType(c.id, 'fire') }} / 烟 {{ countType(c.id, 'smoke') }}</span>
               <span>风险 {{ detectionOf(c.id).risk_score }}</span>
               <span>{{ detectionOf(c.id).fps }} FPS</span>
+              <span v-if="detectionOf(c.id).tiled" class="tiled">远距离扫描</span>
             </div>
           </div>
           <div class="meta">
@@ -175,6 +181,7 @@ onUnmounted(() => clearInterval(timer))
   position: absolute; left: 8px; bottom: 8px; display: flex; gap: 10px; font-size: 12px;
   background: rgba(0, 0, 0, .55); padding: 4px 8px; border-radius: 4px; z-index: 2;
 }
+.tiled { color: #ffd666; font-weight: 600; }
 .meta { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; color: #4b5563; }
 .location { margin-left: 8px; color: #9aa2b0; font-size: 12px; }
 .cell { margin-bottom: 16px; }

@@ -35,6 +35,7 @@ class DetectionWorker(threading.Thread):
         self.latest_jpeg: bytes | None = None
         self.latest_raw_jpeg: bytes | None = None
         self.engine = AlarmEngine()
+        self._last_tile_ts = 0.0
 
     def stop(self) -> None:
         self._stop.set()
@@ -72,8 +73,19 @@ class DetectionWorker(threading.Thread):
                         continue
                     break
                 now = time.time()
-                objects = self.detector.detect(frame)
                 s = self.settings_provider()
+                use_tiling = bool(int(s.get("tiling_enabled", 0))) and (
+                    now - self._last_tile_ts >= float(s.get("tile_interval", 2))
+                )
+                if use_tiling:
+                    objects = self.detector.detect_tiled(
+                        frame,
+                        tile_size=int(s.get("tile_size", 640)),
+                        overlap=float(s.get("tile_overlap", 0.2)),
+                    )
+                    self._last_tile_ts = now
+                else:
+                    objects = self.detector.detect(frame)
                 status, risk, alarm = self.engine.update(
                     now,
                     objects,
@@ -82,6 +94,27 @@ class DetectionWorker(threading.Thread):
                     int(s["continuous_frames"]),
                     float(s["alarm_cooldown"]),
                 )
+                if alarm is not None and int(s.get("verify_enabled", 1)):
+                    trigger = max(
+                        (d for d in objects if d["type"] == alarm["alarm_type"]),
+                        key=lambda d: d["confidence"],
+                        default=None,
+                    )
+                    if trigger is None:
+                        alarm = None
+                    else:
+                        verified, verify_conf = self.detector.verify_region(
+                            frame,
+                            trigger["bbox"],
+                            alarm["alarm_type"],
+                            float(s.get("verify_threshold", 0.2)),
+                        )
+                        if not verified:
+                            self.engine.last_alarm_ts = -1e9
+                            alarm = None
+                        else:
+                            alarm["verified"] = True
+                            alarm["verify_confidence"] = round(verify_conf, 3)
                 ok_raw, raw_buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), FRAME_QUALITY])
                 if ok_raw:
                     self.latest_raw_jpeg = raw_buf.tobytes()
@@ -105,6 +138,7 @@ class DetectionWorker(threading.Thread):
                     "objects": objects,
                     "risk_score": risk,
                     "status": status,
+                    "tiled": use_tiling,
                 }
                 self._send(payload)
                 if alarm is not None:

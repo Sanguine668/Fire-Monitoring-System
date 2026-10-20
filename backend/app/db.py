@@ -57,6 +57,12 @@ def init_db() -> None:
             "smoke_threshold": "0.1",
             "continuous_frames": "3",
             "alarm_cooldown": "8",
+            "tiling_enabled": "1",
+            "tile_size": "640",
+            "tile_overlap": "0.2",
+            "tile_interval": "2",
+            "verify_enabled": "1",
+            "verify_threshold": "0.2",
         }.items():
             c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (k, v))
         columns = {r["name"] for r in c.execute("PRAGMA table_info(alarms)").fetchall()}
@@ -174,6 +180,12 @@ def get_settings() -> dict[str, float | int]:
         "smoke_threshold": float(values["smoke_threshold"]),
         "continuous_frames": int(values["continuous_frames"]),
         "alarm_cooldown": int(values["alarm_cooldown"]),
+        "tiling_enabled": int(values.get("tiling_enabled", "1")),
+        "tile_size": int(values.get("tile_size", "640")),
+        "tile_overlap": float(values.get("tile_overlap", "0.2")),
+        "tile_interval": int(values.get("tile_interval", "2")),
+        "verify_enabled": int(values.get("verify_enabled", "1")),
+        "verify_threshold": float(values.get("verify_threshold", "0.2")),
     }
 
 

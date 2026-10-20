@@ -33,6 +33,12 @@ class SettingsPayload(BaseModel):
     smoke_threshold: float = Field(ge=0.1, le=0.99)
     continuous_frames: int = Field(ge=1, le=30)
     alarm_cooldown: int = Field(ge=1, le=120)
+    tiling_enabled: int = Field(default=1, ge=0, le=1)
+    tile_size: int = Field(default=640, ge=320, le=1280)
+    tile_overlap: float = Field(default=0.2, ge=0, le=0.5)
+    tile_interval: int = Field(default=2, ge=1, le=10)
+    verify_enabled: int = Field(default=1, ge=0, le=1)
+    verify_threshold: float = Field(default=0.2, ge=0.05, le=0.9)
 
 
 class AckGroupPayload(BaseModel):
