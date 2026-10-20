@@ -12,6 +12,7 @@ from .config import DEFAULT_FPS, FRAME_QUALITY
 from .detector import draw_detections
 from .events import WsManager
 from .sources import is_network_source, open_capture
+from .tiling import merge_detections
 
 NETWORK_RETRY_CAP = 10.0
 FILE_RETRY_CAP = 60.0
@@ -36,6 +37,8 @@ class DetectionWorker(threading.Thread):
         self.latest_raw_jpeg: bytes | None = None
         self.engine = AlarmEngine()
         self._last_tile_ts = 0.0
+        self._tile_objects: list[dict[str, Any]] = []
+        self._tile_expire = 0.0
 
     def stop(self) -> None:
         self._stop.set()
@@ -84,8 +87,13 @@ class DetectionWorker(threading.Thread):
                         overlap=float(s.get("tile_overlap", 0.2)),
                     )
                     self._last_tile_ts = now
+                    self._tile_objects = objects
+                    self._tile_expire = now + float(s.get("tile_interval", 2))
                 else:
                     objects = self.detector.detect(frame)
+                    # 切片间隔内保持远景结果，避免烟雾告警因普通帧漏检而断档
+                    if self._tile_objects and now < self._tile_expire:
+                        objects = merge_detections(objects + self._tile_objects, 0.5)
                 status, risk, alarm = self.engine.update(
                     now,
                     objects,
