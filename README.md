@@ -13,7 +13,7 @@
 | `backend/` | FastAPI 后端 | 视频源管理、检测 worker、告警引擎、REST/WebSocket/MJPEG 接口 |
 | `frontend/` | Vue3 前端 | 监控总览、实时监控、手机接入向导、告警中心、视频源管理、系统设置 |
 | `ai/` | 模型训练环境与产物 | `ai/.venv` 训练环境、`ai/runs/` 训练输出（不入库） |
-| `scripts/` | 辅助脚本 | VOC 转 YOLO、数据体检、训练入口、演示视频生成、手机推流模拟 |
+| `scripts/` | 辅助脚本 | 数据管线、预缩放、双类训练、召回/切片评测、演示视频、手机推流模拟 |
 | `docs/课程任务/` | 课程交付材料 | 分工、项目介绍、参考材料、数据报告，见下方索引 |
 | `docs/superpowers/` | 设计与实施文档 | 系统设计文档、各阶段实施计划 |
 | `docs/ai-training-records.md` | 模型训练记录 | 数据集、超参、指标与遗留问题 |
@@ -68,10 +68,19 @@ ai\.venv\Scripts\python scripts\mock_phone_cam.py
 ### 4. 模型训练与数据
 
 ```powershell
-ai\.venv\Scripts\python scripts\inspect_voc.py       # 数据集类别统计
-ai\.venv\Scripts\python scripts\voc2yolo.py          # VOC 转 YOLO 格式
-ai\.venv\Scripts\python scripts\train_yolo.py        # 启动训练（默认 YOLO26n）
+ai\.venv\Scripts\python scripts\prepare_dfire.py          # 生成 D-Fire 双类数据列表与远景/负样本评测集
+ai\.venv\Scripts\python scripts\build_resized_dataset.py   # 预缩放到长边 640，加快单进程训练
+ai\.venv\Scripts\python scripts\train_yolo_v2.py --data datasets/fire-smoke-v2-640/data.yaml --epochs 20 --batch 8 --workers 0
 ```
+
+Windows 下 DataLoader 多进程会因页文件不足触发 `WinError 1455`，训练统一使用 `--workers 0`；预缩放数据集用于降低每轮解码耗时。
+
+### 5. 远距离识别与告警复核
+
+- 远距离模式：每 2 秒把整帧切成 640 瓦片（20% 重叠）做一次高分辨率扫描，跨片 NMS 合并；其余帧仍走整图推理，兼顾帧率与远景小目标召回；
+- 告警复核：触发告警时放大局部区域做二次检测，复核不通过则抑制本次告警，降低单帧误报；
+- 两项参数都在「系统设置」页调整，监控页会在切片帧上显示「远距离扫描」标记；
+- 演示视频：`storage/uploads/demo_farfield.mp4`，由 `scripts/make_farfield_demo.py` 从 D-Fire 连续远景帧生成。
 
 ## 课程交付物索引
 
@@ -97,6 +106,6 @@ ai\.venv\Scripts\python scripts\train_yolo.py        # 启动训练（默认 YOL
 
 ## 数据与声明
 
-- 训练数据来自开源项目 gengyanlei/fire-smoke-detect-yolov4，作者声明仅限学术探索；
-- 数据集体检发现重复、低分辨率与近景偏多等问题，详见 `docs/课程任务/数据集质量报告/`；
+- 当前训练集为 D-Fire（CC0，21,527 张，fire/smoke 双类，含 9,838 张负样本）；
+- 组员补充数据集的取舍见 `docs/课程任务/数据集候选/新增数据集评估_20261020.md`；
 - 数据集与模型权重不随仓库分发，如需测试请联系组长获取。

@@ -1,5 +1,6 @@
 import numpy as np
 
+from backend.app.detector import YoloDetector
 from backend.app.tiling import merge_detections, tile_frame
 
 
@@ -37,3 +38,16 @@ def test_merge_keeps_different_classes_separate():
         {"type": "smoke", "confidence": 0.8, "bbox": [5, 5, 50, 50]},
     ]
     assert len(merge_detections(dets, iou_thr=0.5)) == 2
+
+
+def test_detect_tiled_offsets_boxes_to_full_frame():
+    det = object.__new__(YoloDetector)
+
+    def fake_predict(frames, conf):
+        return [[{"type": "fire", "confidence": 0.8, "bbox": [0, 0, 10, 10]}] for _ in frames]
+
+    det._predict = fake_predict
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    out = det.detect_tiled(frame, tile_size=640, overlap=0.2)
+    origins = {(item["bbox"][0], item["bbox"][1]) for item in out}
+    assert origins == {(0, 0), (512, 0), (640, 0), (0, 80), (512, 80), (640, 80)}
