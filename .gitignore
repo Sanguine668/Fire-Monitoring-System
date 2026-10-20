@@ -13,6 +13,8 @@ dist/
 storage/*.db
 storage/uploads/*
 storage/snapshots/*
+storage/backup/
+storage/tmp_*
 
 # 数据集与权重（体积大，不入库）
 datasets/
