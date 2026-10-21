@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from pathlib import Path
 
@@ -9,7 +10,10 @@ import numpy as np
 from PIL import Image
 from ultralytics import YOLO
 
-from backend.app.tiling import merge_detections, tile_frame
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from backend.app.tiling import merge_detections, tile_frame  # noqa: E402
 
 
 def read_bgr(path: Path):

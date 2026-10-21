@@ -7,5 +7,5 @@ def test_init_and_crud() -> None:
     assert db.get_camera(cid)["name"] == "测试源"
     db.set_camera_online(cid, True)
     assert db.get_camera(cid)["online"] == 1
-    assert db.get_settings()["fire_threshold"] == 0.1
+    assert db.get_settings()["fire_threshold"] == 0.40
     db.delete_camera(cid)

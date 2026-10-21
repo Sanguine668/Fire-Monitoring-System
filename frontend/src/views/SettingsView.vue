@@ -4,8 +4,8 @@ import { ElMessage } from 'element-plus'
 import { api } from '../api'
 
 const defaults = {
-  fire_threshold: 0.1,
-  smoke_threshold: 0.1,
+  fire_threshold: 0.4,
+  smoke_threshold: 0.45,
   continuous_frames: 3,
   alarm_cooldown: 8,
   tiling_enabled: 1,
@@ -13,7 +13,7 @@ const defaults = {
   tile_overlap: 0.2,
   tile_interval: 2,
   verify_enabled: 1,
-  verify_threshold: 0.2
+  verify_threshold: 0.25
 }
 const form = ref({ ...defaults })
 const loading = ref(false)

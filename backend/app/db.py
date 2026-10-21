@@ -53,8 +53,8 @@ def init_db() -> None:
             """
         )
         for k, v in {
-            "fire_threshold": "0.1",
-            "smoke_threshold": "0.1",
+            "fire_threshold": "0.40",
+            "smoke_threshold": "0.45",
             "continuous_frames": "3",
             "alarm_cooldown": "8",
             "tiling_enabled": "1",
@@ -62,9 +62,13 @@ def init_db() -> None:
             "tile_overlap": "0.2",
             "tile_interval": "2",
             "verify_enabled": "1",
-            "verify_threshold": "0.2",
+            "verify_threshold": "0.25",
         }.items():
             c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (k, v))
+        current = {r["key"]: r["value"] for r in c.execute("SELECT * FROM settings").fetchall()}
+        if current.get("fire_threshold") == "0.1" and current.get("smoke_threshold") == "0.1":
+            c.execute("UPDATE settings SET value='0.40' WHERE key='fire_threshold'")
+            c.execute("UPDATE settings SET value='0.45' WHERE key='smoke_threshold'")
         columns = {r["name"] for r in c.execute("PRAGMA table_info(alarms)").fetchall()}
         if "count" not in columns:
             c.execute("ALTER TABLE alarms ADD COLUMN count INTEGER NOT NULL DEFAULT 1")
@@ -185,7 +189,7 @@ def get_settings() -> dict[str, float | int]:
         "tile_overlap": float(values.get("tile_overlap", "0.2")),
         "tile_interval": int(values.get("tile_interval", "2")),
         "verify_enabled": int(values.get("verify_enabled", "1")),
-        "verify_threshold": float(values.get("verify_threshold", "0.2")),
+        "verify_threshold": float(values.get("verify_threshold", "0.25")),
     }
 
 

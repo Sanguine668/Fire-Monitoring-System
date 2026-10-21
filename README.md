@@ -31,7 +31,7 @@ ai\.venv\Scripts\python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 80
 ```
 
 - `--host 0.0.0.0` 是手机接入的前提，否则手机访问不到电脑；
-- 模型默认路径：`ai/runs/fire26n/weights/best.pt`
+- 模型默认路径：`ai/runs/fire26n-v2/weights/best.pt`（20 轮 D-Fire 双类模型）
 - 接口文档：http://127.0.0.1:8000/docs
 - 主要接口：`/api/health`、`/api/network`、`/api/probe`、`/api/cameras`、`/api/uploads`、`/api/alarms`、`/api/settings`、`/api/dashboard`、`/stream/{id}`、`/ws/events`
 - 注意：本机 CPU 推理会因线程/内存限制报错，演示与调试请使用 GPU（`FIREGUARD_DEVICE=0`）

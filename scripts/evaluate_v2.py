@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -10,9 +11,11 @@ import numpy as np
 from PIL import Image
 from ultralytics import YOLO
 
-from backend.app.tiling import merge_detections, tile_frame
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from backend.app.tiling import merge_detections, tile_frame  # noqa: E402
+
 DATA = ROOT / "datasets" / "fire-smoke-v2-640" / "data.yaml"
 LISTS = ROOT / "datasets" / "fire-smoke-v2"
 
@@ -71,7 +74,10 @@ def main() -> None:
     old = YOLO(args.old) if Path(args.old).is_file() else None
     result: dict = {"weights": args.weights, "conf": args.conf}
 
-    metrics = new.val(data=str(DATA), split="test", imgsz=640, device=0, plots=False, verbose=False)
+    metrics = new.val(
+        data=str(DATA), split="test", imgsz=640, device=0,
+        batch=8, workers=0, plots=False, verbose=False,
+    )
     result["test"] = {
         "mAP50": round(float(metrics.box.map50), 4),
         "mAP50-95": round(float(metrics.box.map), 4),
