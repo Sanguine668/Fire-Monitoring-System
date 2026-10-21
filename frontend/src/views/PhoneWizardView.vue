@@ -7,6 +7,7 @@ import { api, streamUrl } from '../api'
 const networkInfo = ref({ addresses: [], preferred: '', dashboard_url: '' })
 const phoneUrl = ref('')
 const probing = ref(false)
+const autoProbing = ref(false)
 const probeResult = ref(null)
 const saving = ref(false)
 const savedCamera = ref(null)
@@ -66,6 +67,31 @@ async function testConnection() {
     probeResult.value = { ok: false, message: error.message }
   } finally {
     probing.value = false
+  }
+}
+
+async function autoProbe() {
+  if (!phoneUrl.value.trim()) {
+    ElMessage.warning('请先填写手机 IP 或地址')
+    return
+  }
+  autoProbing.value = true
+  probeResult.value = null
+  try {
+    const result = await api.probePhone({ host: phoneUrl.value.trim() })
+    if (result.ok && result.working.length) {
+      phoneUrl.value = result.working[0].url
+      probeResult.value = {
+        ok: true,
+        message: `找到 ${result.working.length} 个可用地址：${result.working.map((item) => item.url).join(' / ')}`
+      }
+    } else {
+      probeResult.value = { ok: false, message: '未找到可用端点：请确认手机 IP、已 Start server、电脑与手机同一网络' }
+    }
+  } catch (error) {
+    probeResult.value = { ok: false, message: error.message }
+  } finally {
+    autoProbing.value = false
   }
 }
 
@@ -167,9 +193,10 @@ onUnmounted(() => clearInterval(pollTimer))
             </template>
           </el-input>
           <p class="muted">
-            只填 IP 会自动补全为 http://IP:8080/video；只填「IP:端口」会补上 /video；也可以直接粘贴 App 显示的完整地址。
+            只填 IP 会自动补全为 http://IP:8080/video；如果连不上，点「自动检测可用地址」，会并行尝试 /video、/videofeed、/shot.jpg 和 RTSP。
             填本地视频路径（如 E:/demo.mp4）只会试连、不会保存成摄像头。
           </p>
+          <el-button :icon="Connection" :loading="autoProbing" @click="autoProbe">自动检测可用地址</el-button>
           <el-alert
             v-if="probeResult"
             :type="probeResult.ok ? 'success' : 'error'"

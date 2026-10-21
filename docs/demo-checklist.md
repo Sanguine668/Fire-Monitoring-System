@@ -38,6 +38,23 @@ curl http://127.0.0.1:8000/api/model
 
 注意：是**电脑去连手机**，不需要手机访问电脑；只要电脑能访问手机 `8080` 端口即可。
 
+IP Webcam 的「视频格式」选项只影响录制，不影响它自带的 MJPEG 地址；`/video` 仍可用。如果 `/video` 连不上，直接点向导里的 **「自动检测可用地址」**，系统会并行尝试：
+
+- `http://手机IP:8080/video`（MJPEG）
+- `http://手机IP:8080/videofeed`（部分版本）
+- `http://手机IP:8080/shot.jpg`（JPEG 快照轮询，约 3 FPS）
+- `rtsp://手机IP:8080/h264_ulaw.sdp`
+- `rtsp://手机IP:8080/h264_pcm.sdp`
+
+手动诊断：
+
+```powershell
+Test-NetConnection 192.168.43.1 -Port 8080
+curl http://192.168.43.1:8080/shot.jpg -o shot.jpg
+```
+
+`Test-NetConnection` 不通说明是网络/IP 问题，不是视频格式问题。
+
 ## 4. 建议演示顺序（5–7 分钟）
 
 1. **总览页**：展示模型 `smoke + fire`、远距离开、告警复核开、在线视频源数量；
@@ -72,6 +89,7 @@ ai\.venv\Scripts\python scripts\mock_phone_cam.py storage\uploads\demo_fire.mp4 
 | 现象 | 处理 |
 | --- | --- |
 | 手机源一直离线 | 确认 IP Webcam 已启动、地址是 `/video`、电脑与手机同一网络 |
+| IP Webcam 没有 MJPEG 选项 | 不影响 `/video`；点「自动检测可用地址」，或改用 `/videofeed`、`/shot.jpg` |
 | 没有检测框 | 检查阈值是否被调得过高；恢复默认 fire 0.40 / smoke 0.45 |
 | 画面卡顿 | 关闭远距离模式，或把扫描间隔调大、瓦片尺寸调小 |
 | 告警太频繁 | 提高阈值、增大连续帧数/冷却时间；演示前清空告警 |

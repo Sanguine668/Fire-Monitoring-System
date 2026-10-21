@@ -37,6 +37,27 @@ class Handler(BaseHTTPRequestHandler):
         print("%s - %s" % (self.address_string(), fmt % args), flush=True)
 
     def do_GET(self):
+        if self.path.rstrip("/") == "/shot.jpg":
+            cap = cv2.VideoCapture(VIDEO)
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(time.time() * 10) % total)
+            ok, frame = cap.read()
+            cap.release()
+            if not ok:
+                self.send_error(503, "no frame")
+                return
+            ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            if not ok:
+                self.send_error(500, "encode failed")
+                return
+            data = buf.tobytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if self.path.rstrip("/") not in ("/video", ""):
             self.send_error(404, "not found")
             return

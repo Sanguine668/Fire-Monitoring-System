@@ -38,7 +38,7 @@ class SettingsPayload(BaseModel):
     tile_overlap: float = Field(default=0.2, ge=0, le=0.5)
     tile_interval: int = Field(default=2, ge=1, le=10)
     verify_enabled: int = Field(default=1, ge=0, le=1)
-    verify_threshold: float = Field(default=0.2, ge=0.05, le=0.9)
+    verify_threshold: float = Field(default=0.25, ge=0.05, le=0.9)
 
 
 class AckGroupPayload(BaseModel):
@@ -48,6 +48,10 @@ class AckGroupPayload(BaseModel):
 
 class ProbePayload(BaseModel):
     source: str = Field(min_length=1)
+
+
+class PhoneProbePayload(BaseModel):
+    host: str = Field(min_length=1)
 
 
 class CameraRegistry:
@@ -166,6 +170,51 @@ def create_app() -> FastAPI:
         if worker.is_alive():
             result["message"] = "连接超时（8 秒），请检查网络与地址"
         return result
+
+    @app.post("/api/probe_phone")
+    def probe_phone(payload: PhoneProbePayload) -> dict[str, Any]:
+        """并行尝试 IP Webcam 常见端点，返回可用的地址。"""
+        from concurrent.futures import ThreadPoolExecutor
+        from urllib.parse import urlparse
+
+        from .sources import open_capture
+
+        raw = payload.host.strip()
+        if "://" not in raw:
+            raw = f"http://{raw}"
+        parsed = urlparse(raw)
+        host = parsed.hostname or payload.host.strip()
+        port = parsed.port or 8080
+        candidates = [
+            f"http://{host}:{port}/video",
+            f"http://{host}:{port}/videofeed",
+            f"http://{host}:{port}/shot.jpg",
+            f"rtsp://{host}:{port}/h264_ulaw.sdp",
+            f"rtsp://{host}:{port}/h264_pcm.sdp",
+        ]
+
+        def try_one(url: str) -> dict[str, Any]:
+            cap = None
+            try:
+                cap = open_capture(url, open_timeout_ms=3500, read_timeout_ms=3500)
+                ok, frame = cap.read() if cap.isOpened() else (False, None)
+                if ok and frame is not None:
+                    h, w = frame.shape[:2]
+                    return {"url": url, "ok": True, "width": w, "height": h}
+                return {"url": url, "ok": False, "message": "未读到画面"}
+            except Exception as exc:  # noqa: BLE001
+                return {"url": url, "ok": False, "message": str(exc)[:120]}
+            finally:
+                if cap is not None:
+                    try:
+                        cap.release()
+                    except Exception:
+                        pass
+
+        with ThreadPoolExecutor(max_workers=len(candidates)) as pool:
+            results = list(pool.map(try_one, candidates))
+        working = [r for r in results if r["ok"]]
+        return {"ok": bool(working), "working": working, "tried": results}
 
     @app.get("/api/cameras")
     def cameras() -> list[dict[str, Any]]:
