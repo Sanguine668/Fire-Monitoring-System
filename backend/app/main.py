@@ -216,6 +216,19 @@ def create_app() -> FastAPI:
     def alarms(limit: int = 100) -> list[dict[str, Any]]:
         return db.list_alarms(min(limit, 500))
 
+    @app.delete("/api/alarms")
+    def clear_alarms() -> dict[str, Any]:
+        return {"ok": True, "deleted": db.clear_alarms()}
+
+    @app.get("/api/model")
+    def model_info(reg: CameraRegistry = Depends(registry)) -> dict[str, Any]:
+        detector = reg.detector
+        return {
+            "path": MODEL_PATH.name,
+            "classes": detector.id2name if detector else {},
+            "task": "detect",
+        }
+
     @app.post("/api/alarms/{alarm_id}/ack")
     def ack(alarm_id: int) -> dict[str, Any]:
         if not db.ack_alarm(alarm_id):

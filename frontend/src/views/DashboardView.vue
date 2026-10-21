@@ -10,6 +10,13 @@ const { realtime } = useRealtime()
 const loading = ref(false)
 const dashboard = ref({ camera_count: 0, online_count: 0, today_alarms: 0, unhandled: 0, recent: [] })
 const alarmList = ref([])
+const model = ref({ classes: {} })
+const settings = ref({})
+
+const modelName = computed(() => {
+  const names = Object.values(model.value.classes || {})
+  return names.length ? names.join(' + ') : '加载中'
+})
 
 const metrics = computed(() => [
   { label: '监控点位', value: dashboard.value.camera_count ?? 0, unit: '路' },
@@ -53,9 +60,13 @@ function renderChart() {
 async function load() {
   loading.value = true
   try {
-    const [dash, alarms] = await Promise.all([api.dashboard(), api.alarms(200)])
+    const [dash, alarms, modelInfo, currentSettings] = await Promise.all([
+      api.dashboard(), api.alarms(200), api.modelInfo(), api.settings()
+    ])
     dashboard.value = dash
     alarmList.value = alarms
+    model.value = modelInfo
+    settings.value = currentSettings
     renderChart()
   } catch (error) {
     ElMessage.error(`加载总览失败：${error.message}（请确认后端已启动）`)
@@ -86,6 +97,13 @@ onUnmounted(() => {
   <div v-loading="loading" class="dashboard">
     <div class="toolbar">
       <el-button :icon="Refresh" @click="load">刷新</el-button>
+      <el-tag size="small" type="info">模型 {{ modelName }}</el-tag>
+      <el-tag size="small" :type="settings.tiling_enabled ? 'warning' : 'info'">
+        远距离 {{ settings.tiling_enabled ? '开' : '关' }}
+      </el-tag>
+      <el-tag size="small" :type="settings.verify_enabled ? 'success' : 'info'">
+        告警复核 {{ settings.verify_enabled ? '开' : '关' }}
+      </el-tag>
       <span class="hint">数据每 15 秒自动刷新，收到新告警时立即刷新</span>
     </div>
     <el-row :gutter="16">

@@ -160,6 +160,12 @@ def list_alarms(limit: int = 100) -> list[dict[str, Any]]:
         return [dict(r) for r in c.execute("SELECT * FROM alarms ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
 
 
+def clear_alarms() -> int:
+    with _conn() as c:
+        cur = c.execute("DELETE FROM alarms")
+        return cur.rowcount
+
+
 def ack_alarm(alarm_id: int) -> bool:
     with _conn() as c:
         cur = c.execute("UPDATE alarms SET status='handled' WHERE id=? AND status='unhandled'", (alarm_id,))

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, Download, Refresh, Search } from '@element-plus/icons-vue'
+import { Check, Delete, Download, Refresh, Search } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { api } from '../api'
 import { useRealtime } from '../composables/useRealtime'
@@ -111,6 +111,17 @@ async function load(showError = true) {
     if (showError) ElMessage.error(`加载告警失败：${error.message}`)
   } finally {
     loading.value = false
+  }
+}
+
+async function clearAll() {
+  try {
+    await ElMessageBox.confirm('确定清空全部告警记录？该操作不可恢复。', '清空告警', { type: 'warning' })
+    const result = await api.clearAlarms()
+    ElMessage.success(`已清空 ${result.deleted ?? 0} 条告警`)
+    await load(false)
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(`清空失败：${error.message || error}`)
   }
 }
 
@@ -295,6 +306,7 @@ onUnmounted(() => {
               <el-input v-model="keyword" placeholder="按视频源搜索" clearable style="width: 180px" :prefix-icon="Search" />
               <el-button :icon="Refresh" @click="load()">刷新</el-button>
               <el-button :icon="Download" @click="exportCsv">导出</el-button>
+              <el-button :icon="Delete" plain type="danger" @click="clearAll">清空</el-button>
             </div>
           </template>
 
