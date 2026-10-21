@@ -4,6 +4,7 @@ const state = reactive({
   connected: false,
   detections: {},
   alarms: [],
+  traces: [],
   lastAlarm: null,
   lastDetectionAt: 0
 })
@@ -29,6 +30,19 @@ function connect() {
     }
     if (data.event === 'detection') {
       state.detections[data.camera_id] = data
+      if (data.agents) {
+        state.traces.unshift({
+          camera_id: data.camera_id,
+          timestamp: data.timestamp,
+          status: data.status,
+          risk: data.risk_score,
+          fps: data.fps,
+          tiled: data.tiled,
+          objects: (data.objects || []).length,
+          agents: data.agents
+        })
+        state.traces = state.traces.slice(0, 80)
+      }
       state.lastDetectionAt = Date.now()
     } else if (data.event === 'alarm') {
       state.alarms.unshift(data.alarm)

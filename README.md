@@ -18,6 +18,7 @@
 | `docs/superpowers/` | 设计与实施文档 | 系统设计文档、各阶段实施计划 |
 | `docs/ai-training-records.md` | 模型训练记录 | 数据集、超参、指标与遗留问题 |
 | `docs/demo-checklist.md` | 演示清单 | 启动、手机推流、演示顺序与回退方案 |
+| `docs/multi-agent-architecture.md` | 多智能体架构 | 感知/远场/时序/复核/决策五 Agent 的职责、证据与指标 |
 | `软件项目管理课程文档/` | 老师提供的资料 | 课程说明、参考模板、需求分析案例 |
 | `提交文档/` | 本地课程模板 | 学校实验报告封面模板、项目章程参考模板（不进仓库） |
 | `datasets/`、`storage/`、`weights/`、`runs/` | 数据与运行产物 | 体积大，已加入 .gitignore，不入库 |

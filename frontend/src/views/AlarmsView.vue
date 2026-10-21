@@ -49,11 +49,13 @@ const displayRows = computed(() => {
         count: row.count || 1,
         firstAt: row.created_at,
         latestAt: row.created_at,
-        maxConfidence: row.confidence
+        maxConfidence: row.confidence,
+        verified: Boolean(row.verified)
       })
       continue
     }
     exist.count += row.count || 1
+    exist.verified = Boolean(exist.verified || row.verified)
     if ((row.created_at || '') > (exist.latestAt || '')) {
       exist.latestAt = row.created_at
       exist.id = row.id
@@ -340,6 +342,12 @@ onUnmounted(() => {
                     <span v-else>1 次</span>
                   </template>
                 </el-table-column>
+                <el-table-column label="智能体" width="92">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.verified" type="success" size="small" effect="plain">已复核</el-tag>
+                    <span v-else class="muted">—</span>
+                  </template>
+                </el-table-column>
                 <el-table-column label="最高置信度" width="170">
                   <template #default="{ row }">
                     <el-progress :percentage="Math.round((row.maxConfidence || row.confidence || 0) * 100)" :stroke-width="8" color="#e5484d" />
@@ -399,6 +407,12 @@ onUnmounted(() => {
                   <template #default="{ row }">
                     <el-tag v-if="row.count > 1" type="warning" size="small" effect="plain">{{ row.count }} 次</el-tag>
                     <span v-else>1 次</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="智能体" width="92">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.verified" type="success" size="small" effect="plain">已复核</el-tag>
+                    <span v-else class="muted">—</span>
                   </template>
                 </el-table-column>
                 <el-table-column label="最高置信度" width="170">
@@ -477,6 +491,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.muted { color: #c0c4cc; }
 .tip { margin-bottom: 12px; }
 .metrics { margin-bottom: 16px; }
 .metric { display: flex; justify-content: space-between; align-items: center; }

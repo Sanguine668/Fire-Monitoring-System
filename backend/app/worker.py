@@ -102,13 +102,22 @@ class DetectionWorker(threading.Thread):
                     int(s["continuous_frames"]),
                     float(s["alarm_cooldown"]),
                 )
-                if alarm is not None and int(s.get("verify_enabled", 1)):
+                verify_enabled = bool(int(s.get("verify_enabled", 1)))
+                verification_state = {
+                    "active": verify_enabled,
+                    "triggered": False,
+                    "passed": None,
+                    "confidence": None,
+                }
+                if alarm is not None and verify_enabled:
+                    verification_state["triggered"] = True
                     trigger = max(
                         (d for d in objects if d["type"] == alarm["alarm_type"]),
                         key=lambda d: d["confidence"],
                         default=None,
                     )
                     if trigger is None:
+                        verification_state["passed"] = False
                         alarm = None
                     else:
                         verified, verify_conf = self.detector.verify_region(
@@ -117,12 +126,38 @@ class DetectionWorker(threading.Thread):
                             alarm["alarm_type"],
                             float(s.get("verify_threshold", 0.2)),
                         )
+                        verification_state["confidence"] = round(verify_conf, 3)
+                        verification_state["passed"] = verified
                         if not verified:
                             self.engine.last_alarm_ts = -1e9
                             alarm = None
                         else:
                             alarm["verified"] = True
                             alarm["verify_confidence"] = round(verify_conf, 3)
+                trace = {
+                    "perception": {
+                        "active": True,
+                        "objects": len(objects),
+                        "top_confidence": round(max((d["confidence"] for d in objects), default=0.0), 3),
+                    },
+                    "farfield": {
+                        "active": use_tiling,
+                        "tile_size": int(s.get("tile_size", 640)),
+                        "interval": int(s.get("tile_interval", 2)),
+                        "held": len(self._tile_objects),
+                    },
+                    "temporal": {
+                        "smoke_streak": self.engine.smoke_streak,
+                        "required": int(s["continuous_frames"]),
+                        "cooldown": int(s["alarm_cooldown"]),
+                    },
+                    "verification": verification_state,
+                    "decision": {
+                        "status": status,
+                        "risk": risk,
+                        "alarm": alarm is not None,
+                    },
+                }
                 ok_raw, raw_buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), FRAME_QUALITY])
                 if ok_raw:
                     self.latest_raw_jpeg = raw_buf.tobytes()
@@ -147,6 +182,7 @@ class DetectionWorker(threading.Thread):
                     "risk_score": risk,
                     "status": status,
                     "tiled": use_tiling,
+                    "agents": trace,
                 }
                 self._send(payload)
                 if alarm is not None:
@@ -156,7 +192,9 @@ class DetectionWorker(threading.Thread):
                         alarm["alarm_type"],
                         alarm["level"],
                         alarm["confidence"],
+                        1 if alarm.get("verified") else 0,
                     )
+                    record["agents"] = trace
                     self._send({"event": "alarm", "alarm": record})
                 time.sleep(max(0.0, interval - (time.time() - now)))
             cap.release()

@@ -278,6 +278,39 @@ def create_app() -> FastAPI:
             "task": "detect",
         }
 
+    @app.get("/api/agents")
+    def agents_info() -> dict[str, Any]:
+        """多智能体协同链路的定义、实时参数与评测指标。"""
+        return {
+            "pipeline": ["perception", "farfield", "temporal", "verification", "decision"],
+            "agents": [
+                {"key": "perception", "name": "感知 Agent", "role": "整图烟火检测",
+                 "desc": "YOLO26n 双类检测，输出 fire/smoke 与置信度"},
+                {"key": "farfield", "name": "远场 Agent", "role": "切片扫描",
+                 "desc": "每 2 秒切 640 瓦片、20% 重叠、跨片 NMS 合并"},
+                {"key": "temporal", "name": "时序 Agent", "role": "连续帧与短时保持",
+                 "desc": "切片结果保持、烟雾连续帧确认、告警冷却"},
+                {"key": "verification", "name": "复核 Agent", "role": "局部二次检测",
+                 "desc": "告警区域裁剪放大后复检，不通过则抑制"},
+                {"key": "decision", "name": "决策 Agent", "role": "风险分级与告警合并",
+                 "desc": "按阈值、风险和冷却生成或合并告警"},
+            ],
+            "metrics": {
+                "map50": 0.724,
+                "map50_95": 0.400,
+                "farfield_recall": 0.812,
+                "farfield_old": 0.185,
+                "hardneg_fpr": 0.342,
+                "hardneg_old": 0.527,
+                "tiling_plain": 0.940,
+                "tiling_tiled": 0.960,
+                "smokefire_smoke": 0.908,
+                "smokefire_fire": 0.905,
+                "calibrated_fire_fpr": 0.048,
+            },
+            "settings": db.get_settings(),
+        }
+
     @app.post("/api/alarms/{alarm_id}/ack")
     def ack(alarm_id: int) -> dict[str, Any]:
         if not db.ack_alarm(alarm_id):

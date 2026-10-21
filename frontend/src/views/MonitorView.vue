@@ -19,6 +19,10 @@ const enabledCameras = computed(() => cameras.value.filter((c) => c.enabled))
 const selected = computed(
   () => cameras.value.find((c) => c.id === selectedId.value) || enabledCameras.value[0] || null
 )
+const selectedTrace = computed(() => {
+  const id = selected.value?.id
+  return id ? detectionOf(id)?.agents || null : null
+})
 
 async function load(showError = false) {
   try {
@@ -81,6 +85,30 @@ onUnmounted(() => clearInterval(timer))
       </el-radio-group>
       <span class="hint">并列模式点击画面进入焦点；焦点模式在右侧缩略图切换</span>
       <el-button :icon="Refresh" @click="load(true)">刷新</el-button>
+    </div>
+
+    <div v-if="selectedTrace" class="agent-strip">
+      <span class="agent-strip-title">智能体链路</span>
+      <el-tag size="small" type="info">感知 {{ selectedTrace.perception.objects }}</el-tag>
+      <el-tag size="small" :type="selectedTrace.farfield.active ? 'warning' : 'info'">
+        远场 {{ selectedTrace.farfield.active ? '扫描中' : '整图' }}
+      </el-tag>
+      <el-tag size="small" :type="selectedTrace.temporal.smoke_streak ? 'warning' : 'info'">
+        时序 {{ selectedTrace.temporal.smoke_streak }}/{{ selectedTrace.temporal.required }}
+      </el-tag>
+      <el-tag
+        size="small"
+        :type="selectedTrace.verification.passed === null ? 'info' : selectedTrace.verification.passed ? 'success' : 'danger'"
+      >
+        复核 {{ selectedTrace.verification.passed === null ? '待触发' : selectedTrace.verification.passed ? '通过' : '拦截' }}
+      </el-tag>
+      <el-tag
+        size="small"
+        :type="selectedTrace.decision.alarm ? 'danger' : selectedTrace.decision.status === 'normal' ? 'success' : 'warning'"
+      >
+        决策 {{ selectedTrace.decision.status }} · 风险 {{ selectedTrace.decision.risk }}
+      </el-tag>
+      <router-link to="/agents" class="agent-link">查看智能体详情 →</router-link>
     </div>
 
     <el-empty v-if="cameras.length === 0" description="还没有视频源，请到“视频源管理”上传视频或添加手机推流地址" />
@@ -179,6 +207,13 @@ onUnmounted(() => clearInterval(timer))
 
 <style scoped>
 .monitor { position: relative; min-height: 420px; }
+.agent-strip {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
+  padding: 8px 12px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;
+}
+.agent-strip-title { color: #1f4d78; font-weight: 600; font-size: 13px; margin-right: 2px; }
+.agent-link { margin-left: auto; color: #1f4d78; font-size: 12px; text-decoration: none; }
+.agent-link:hover { text-decoration: underline; }
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 .hint { color: #9aa2b0; font-size: 12px; margin-right: auto; }
 .stage { height: 260px; background: #10131a; color: #fff; position: relative; overflow: hidden; cursor: pointer; }

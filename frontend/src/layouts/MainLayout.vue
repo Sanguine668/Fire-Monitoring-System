@@ -14,6 +14,7 @@ const pageSub = computed(() => route.meta.sub || '')
 const menus = [
   { path: '/', label: '监控总览' },
   { path: '/monitor', label: '实时监控' },
+  { path: '/agents', label: '智能体协同' },
   { path: '/phone', label: '手机接入向导' },
   { path: '/alarms', label: '告警中心' },
   { path: '/cameras', label: '视频源管理' },

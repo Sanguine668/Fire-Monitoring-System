@@ -47,6 +47,7 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'unhandled',
                 count INTEGER NOT NULL DEFAULT 1,
+                verified INTEGER NOT NULL DEFAULT 0,
                 updated_at TEXT
             );
             CREATE TABLE IF NOT EXISTS settings (
@@ -77,6 +78,8 @@ def init_db() -> None:
             c.execute("ALTER TABLE alarms ADD COLUMN count INTEGER NOT NULL DEFAULT 1")
         if "updated_at" not in columns:
             c.execute("ALTER TABLE alarms ADD COLUMN updated_at TEXT")
+        if "verified" not in columns:
+            c.execute("ALTER TABLE alarms ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
 
 
 def insert_camera(name: str, source_type: str, source: str, location: str = "", loop: int = 1) -> int:
@@ -115,7 +118,14 @@ def delete_camera(camera_id: int) -> None:
         c.execute("DELETE FROM cameras WHERE id=?", (camera_id,))
 
 
-def create_alarm(camera_id: int, camera_name: str, alarm_type: str, level: str, confidence: float) -> dict[str, Any]:
+def create_alarm(
+    camera_id: int,
+    camera_name: str,
+    alarm_type: str,
+    level: str,
+    confidence: float,
+    verified: int = 0,
+) -> dict[str, Any]:
     """创建告警；若同一视频源+同一类型已有未处理告警，则合并更新并累计次数。"""
     with _conn() as c:
         created = now_text()
@@ -126,8 +136,9 @@ def create_alarm(camera_id: int, camera_name: str, alarm_type: str, level: str, 
         if exist:
             count = int(exist["count"] or 1) + 1
             c.execute(
-                "UPDATE alarms SET confidence=?, created_at=?, updated_at=?, count=? WHERE id=?",
-                (round(confidence, 3), created, created, count, exist["id"]),
+                "UPDATE alarms SET confidence=?, created_at=?, updated_at=?, count=?,"
+                " verified=CASE WHEN ?=1 THEN 1 ELSE verified END WHERE id=?",
+                (round(confidence, 3), created, created, count, verified, exist["id"]),
             )
             merged = dict(exist)
             merged.update(
@@ -136,13 +147,14 @@ def create_alarm(camera_id: int, camera_name: str, alarm_type: str, level: str, 
                     "created_at": created,
                     "updated_at": created,
                     "count": count,
+                    "verified": 1 if verified or exist["verified"] else 0,
                 }
             )
             return merged
         cur = c.execute(
-            "INSERT INTO alarms(camera_id,camera_name,alarm_type,level,confidence,created_at,status,count,updated_at)"
-            " VALUES(?,?,?,?,?,?,'unhandled',1,?)",
-            (camera_id, camera_name, alarm_type, level, confidence, created, created),
+            "INSERT INTO alarms(camera_id,camera_name,alarm_type,level,confidence,created_at,status,count,verified,updated_at)"
+            " VALUES(?,?,?,?,?,?,'unhandled',1,?,?)",
+            (camera_id, camera_name, alarm_type, level, confidence, created, verified, created),
         )
         return {
             "id": int(cur.lastrowid),
@@ -154,6 +166,7 @@ def create_alarm(camera_id: int, camera_name: str, alarm_type: str, level: str, 
             "created_at": created,
             "updated_at": created,
             "count": 1,
+            "verified": 1 if verified else 0,
             "status": "unhandled",
         }
 
