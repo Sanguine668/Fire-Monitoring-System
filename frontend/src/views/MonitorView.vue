@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { VideoCamera, Grid, Refresh, SwitchButton, FullScreen } from '@element-plus/icons-vue'
 import { api, streamUrl } from '../api'
@@ -13,7 +13,9 @@ const selectedId = ref(null)
 const togglingId = ref(null)
 const maximized = ref(false)
 const detailVisible = ref(false)
+const agentSnapshot = ref(null)
 let timer = null
+let agentTimer = null
 
 const enabledCameras = computed(() => cameras.value.filter((c) => c.enabled))
 const selected = computed(
@@ -23,6 +25,12 @@ const selectedTrace = computed(() => {
   const id = selected.value?.id
   return id ? detectionOf(id)?.agents || null : null
 })
+
+function refreshAgentSnapshot() {
+  agentSnapshot.value = selectedTrace.value ? { ...selectedTrace.value } : null
+}
+
+watch(selectedId, () => refreshAgentSnapshot())
 
 async function load(showError = false) {
   try {
@@ -71,9 +79,14 @@ onMounted(() => {
   load(true).finally(() => {
     loading.value = false
   })
+  refreshAgentSnapshot()
+  agentTimer = setInterval(refreshAgentSnapshot, 2000)
   timer = setInterval(() => load(false), 10000)
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => {
+  clearInterval(timer)
+  clearInterval(agentTimer)
+})
 </script>
 
 <template>
@@ -87,26 +100,26 @@ onUnmounted(() => clearInterval(timer))
       <el-button :icon="Refresh" @click="load(true)">刷新</el-button>
     </div>
 
-    <div v-if="selectedTrace" class="agent-strip">
+    <div v-if="agentSnapshot" class="agent-strip">
       <span class="agent-strip-title">智能体链路</span>
-      <el-tag size="small" type="info">感知 {{ selectedTrace.perception.objects }}</el-tag>
-      <el-tag size="small" :type="selectedTrace.farfield.active ? 'warning' : 'info'">
-        远场 {{ selectedTrace.farfield.active ? '扫描中' : '整图' }}
+      <el-tag size="small" type="info">感知 {{ agentSnapshot.perception.objects }}</el-tag>
+      <el-tag size="small" :type="agentSnapshot.farfield.active ? 'warning' : 'info'">
+        远场 {{ agentSnapshot.farfield.active ? '扫描中' : '整图' }}
       </el-tag>
-      <el-tag size="small" :type="selectedTrace.temporal.smoke_streak ? 'warning' : 'info'">
-        时序 {{ selectedTrace.temporal.smoke_streak }}/{{ selectedTrace.temporal.required }}
-      </el-tag>
-      <el-tag
-        size="small"
-        :type="selectedTrace.verification.passed === null ? 'info' : selectedTrace.verification.passed ? 'success' : 'danger'"
-      >
-        复核 {{ selectedTrace.verification.passed === null ? '待触发' : selectedTrace.verification.passed ? '通过' : '拦截' }}
+      <el-tag size="small" :type="agentSnapshot.temporal.smoke_streak ? 'warning' : 'info'">
+        时序 {{ agentSnapshot.temporal.smoke_streak }}/{{ agentSnapshot.temporal.required }}
       </el-tag>
       <el-tag
         size="small"
-        :type="selectedTrace.decision.alarm ? 'danger' : selectedTrace.decision.status === 'normal' ? 'success' : 'warning'"
+        :type="agentSnapshot.verification.passed === null ? 'info' : agentSnapshot.verification.passed ? 'success' : 'danger'"
       >
-        决策 {{ selectedTrace.decision.status }} · 风险 {{ selectedTrace.decision.risk }}
+        复核 {{ agentSnapshot.verification.passed === null ? '待触发' : agentSnapshot.verification.passed ? '通过' : '拦截' }}
+      </el-tag>
+      <el-tag
+        size="small"
+        :type="agentSnapshot.decision.alarm ? 'danger' : agentSnapshot.decision.status === 'normal' ? 'success' : 'warning'"
+      >
+        决策 {{ agentSnapshot.decision.status }} · 风险 {{ agentSnapshot.decision.risk }}
       </el-tag>
       <router-link to="/agents" class="agent-link">查看智能体详情 →</router-link>
     </div>
