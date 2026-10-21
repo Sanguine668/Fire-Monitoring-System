@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from datetime import datetime
 from typing import Any
 
@@ -9,8 +10,10 @@ from .config import DB_PATH
 
 def _conn() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=5)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=3000")
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
@@ -182,10 +185,17 @@ def ack_alarm_group(camera_id: int, alarm_type: str) -> int:
         return cur.rowcount
 
 
+_settings_cache: tuple[float, dict[str, float | int]] | None = None
+
+
 def get_settings() -> dict[str, float | int]:
+    global _settings_cache
+    now = time.monotonic()
+    if _settings_cache and now - _settings_cache[0] < 1.0:
+        return dict(_settings_cache[1])
     with _conn() as c:
         values = {r["key"]: r["value"] for r in c.execute("SELECT * FROM settings").fetchall()}
-    return {
+    result = {
         "fire_threshold": float(values["fire_threshold"]),
         "smoke_threshold": float(values["smoke_threshold"]),
         "continuous_frames": int(values["continuous_frames"]),
@@ -197,12 +207,16 @@ def get_settings() -> dict[str, float | int]:
         "verify_enabled": int(values.get("verify_enabled", "1")),
         "verify_threshold": float(values.get("verify_threshold", "0.25")),
     }
+    _settings_cache = (now, result)
+    return dict(result)
 
 
 def put_settings(values: dict[str, float | int]) -> dict[str, float | int]:
+    global _settings_cache
     with _conn() as c:
         for k, v in values.items():
             c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", (k, str(v)))
+    _settings_cache = None
     return {k: v for k, v in values.items()}
 
 

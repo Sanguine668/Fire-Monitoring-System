@@ -11,19 +11,17 @@ const timer = setInterval(() => (now.value = new Date()), 1000)
 onUnmounted(() => clearInterval(timer))
 const pageTitle = computed(() => route.meta.title || '')
 const pageSub = computed(() => route.meta.sub || '')
-const activeMenu = computed(() => route.name)
-
 const menus = [
-  { name: 'dashboard', label: '监控总览', icon: 'Odometer' },
-  { name: 'monitor', label: '实时监控', icon: 'VideoCamera' },
-  { name: 'phone', label: '手机接入向导', icon: 'Iphone' },
-  { name: 'alarms', label: '告警中心', icon: 'Bell' },
-  { name: 'cameras', label: '视频源管理', icon: 'Monitor' },
-  { name: 'settings', label: '系统设置', icon: 'Setting' }
+  { path: '/', label: '监控总览' },
+  { path: '/monitor', label: '实时监控' },
+  { path: '/phone', label: '手机接入向导' },
+  { path: '/alarms', label: '告警中心' },
+  { path: '/cameras', label: '视频源管理' },
+  { path: '/settings', label: '系统设置' }
 ]
 
-function go(name) {
-  router.push({ name })
+function go(path) {
+  router.push(path)
 }
 </script>
 
@@ -37,8 +35,8 @@ function go(name) {
           <small>火灾智能监测预警</small>
         </div>
       </div>
-      <el-menu :default-active="activeMenu" class="menu" background-color="#12161f" text-color="#aab2c0" active-text-color="#23d18b">
-        <el-menu-item v-for="m in menus" :key="m.name" :index="m.name" @click="go(m.name)">
+      <el-menu router :default-active="route.path" class="menu" background-color="#12161f" text-color="#aab2c0" active-text-color="#23d18b">
+        <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">
           {{ m.label }}
         </el-menu-item>
       </el-menu>
@@ -53,7 +51,9 @@ function go(name) {
           <span class="dot" :class="{ online: realtime.connected }" />
           <span class="status-text">{{ realtime.connected ? '实时通道已连接' : '实时通道未连接' }}</span>
           <el-badge v-if="unhandledCount > 0" :value="unhandledCount" class="badge">
-            <span class="alarm-text">本次会话新告警</span>
+            <el-button text type="danger" size="small" class="alarm-entry" @click="go('/alarms')">
+              本次会话新告警
+            </el-button>
           </el-badge>
           <span class="clock">{{ now.toLocaleString('zh-CN', { hour12: false }) }}</span>
         </div>
@@ -80,6 +80,6 @@ function go(name) {
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #c0c4cc; display: inline-block; }
 .dot.online { background: #23d18b; }
 .status-text { color: #7b8494; font-size: 12px; }
-.alarm-text { color: #e5484d; font-size: 12px; }
+.alarm-entry { font-size: 12px; padding: 0 2px; }
 .main { background: #f3f5f8; }
 </style>

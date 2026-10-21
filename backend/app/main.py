@@ -311,10 +311,12 @@ def create_app() -> FastAPI:
 
         async def gen():
             deadline = time.time() + 30
+            last_sent = None
             while True:
                 frame = w.latest_jpeg if annotated else w.latest_raw_jpeg
-                if frame:
+                if frame and frame is not last_sent:
                     yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                    last_sent = frame
                     deadline = time.time() + 30
                 elif time.time() > deadline:
                     break

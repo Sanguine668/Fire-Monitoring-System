@@ -12,6 +12,7 @@ const viewMode = ref('grid')
 const selectedId = ref(null)
 const togglingId = ref(null)
 const maximized = ref(false)
+const detailVisible = ref(false)
 let timer = null
 
 const enabledCameras = computed(() => cameras.value.filter((c) => c.enabled))
@@ -33,6 +34,11 @@ async function load(showError = false) {
 
 function select(camera) {
   selectedId.value = camera.id
+}
+
+function focus(camera) {
+  selectedId.value = camera.id
+  viewMode.value = 'focus'
 }
 
 async function toggle(camera) {
@@ -67,13 +73,13 @@ onUnmounted(() => clearInterval(timer))
 </script>
 
 <template>
-  <div v-loading="loading">
+  <div v-loading="loading" class="monitor">
     <div class="toolbar">
       <el-radio-group v-model="viewMode" size="default">
         <el-radio-button value="grid"><el-icon><Grid /></el-icon>&nbsp;并列模式</el-radio-button>
         <el-radio-button value="focus"><el-icon><VideoCamera /></el-icon>&nbsp;焦点模式</el-radio-button>
       </el-radio-group>
-      <span class="hint">焦点模式：主画面居中，点击下方缩略图切换</span>
+      <span class="hint">并列模式点击画面进入焦点；焦点模式在右侧缩略图切换</span>
       <el-button :icon="Refresh" @click="load(true)">刷新</el-button>
     </div>
 
@@ -81,50 +87,50 @@ onUnmounted(() => clearInterval(timer))
 
     <!-- 焦点模式 -->
     <template v-else-if="viewMode === 'focus'">
-      <el-card shadow="never" :body-style="{ padding: '0' }" class="focus-card">
-        <div class="stage focus-stage" :class="{ maximized }">
-          <template v-if="selected && selected.enabled">
-            <img :src="streamUrl(selected.id)" class="frame" :alt="selected.name" />
-            <div class="overlay">
-              <span>{{ selected.name }}</span>
-              <span v-if="detectionOf(selected.id)">火 {{ countType(selected.id, 'fire') }} / 烟 {{ countType(selected.id, 'smoke') }}</span>
-              <span v-if="detectionOf(selected.id)">风险 {{ detectionOf(selected.id).risk_score }}</span>
-              <span v-if="detectionOf(selected.id)">{{ detectionOf(selected.id).fps }} FPS</span>
-              <span v-if="detectionOf(selected.id)?.tiled" class="tiled">远距离扫描</span>
-            </div>
-          </template>
-          <div v-else class="placeholder">暂无可用的启用视频源</div>
-        </div>
-        <div class="meta">
-          <div>
-            <b>{{ selected ? selected.name : '—' }}</b>
-            <span class="location">{{ selected ? selected.location || selected.source_type : '' }}</span>
+      <div class="focus-layout">
+        <el-card shadow="never" :body-style="{ padding: '0' }" class="focus-card">
+          <div class="stage focus-stage" :class="{ maximized }">
+            <template v-if="selected && selected.enabled">
+              <img :src="streamUrl(selected.id)" class="frame" :alt="selected.name" />
+              <div class="overlay">
+                <span>{{ selected.name }}</span>
+                <span v-if="detectionOf(selected.id)">火 {{ countType(selected.id, 'fire') }} / 烟 {{ countType(selected.id, 'smoke') }}</span>
+                <span v-if="detectionOf(selected.id)">风险 {{ detectionOf(selected.id).risk_score }}</span>
+                <span v-if="detectionOf(selected.id)">{{ detectionOf(selected.id).fps }} FPS</span>
+                <span v-if="detectionOf(selected.id)?.tiled" class="tiled">远距离扫描</span>
+              </div>
+            </template>
+            <div v-else class="placeholder">暂无可用的启用视频源</div>
           </div>
-          <el-button
-            v-if="selected"
-            :icon="SwitchButton"
-            :loading="togglingId === selected.id"
-            @click="toggle(selected)"
-          >
-            {{ selected.enabled ? '停用' : '启用' }}
-          </el-button>
-          <el-button :icon="FullScreen" @click="maximized = !maximized">
-            {{ maximized ? '还原' : '放大' }}
-          </el-button>
-        </div>
-      </el-card>
+          <div class="meta">
+            <div>
+              <b>{{ selected ? selected.name : '—' }}</b>
+              <span class="location">{{ selected ? selected.location || selected.source_type : '' }}</span>
+            </div>
+            <el-button
+              v-if="selected"
+              :icon="SwitchButton"
+              :loading="togglingId === selected.id"
+              @click="toggle(selected)"
+            >
+              {{ selected.enabled ? '停用' : '启用' }}
+            </el-button>
+            <el-button v-if="selected" :icon="FullScreen" @click="detailVisible = true">悬浮查看</el-button>
+          </div>
+        </el-card>
 
-      <div class="thumbs">
-        <div
-          v-for="c in cameras"
-          :key="c.id"
-          class="thumb"
-          :class="{ active: selected && c.id === selected.id, offline: !c.enabled }"
-          @click="select(c)"
-        >
-          <img v-if="c.enabled" :src="streamUrl(c.id, false)" :alt="c.name" />
-          <div v-else class="thumb-off">已停用</div>
-          <p>{{ c.name }}</p>
+        <div class="focus-side">
+          <div
+            v-for="c in cameras"
+            :key="c.id"
+            class="thumb"
+            :class="{ active: selected && c.id === selected.id, offline: !c.enabled }"
+            @click="select(c)"
+          >
+            <img v-if="c.enabled" :src="streamUrl(c.id, false)" :alt="c.name" />
+            <div v-else class="thumb-off">已停用</div>
+            <p>{{ c.name }}</p>
+          </div>
         </div>
       </div>
     </template>
@@ -133,7 +139,7 @@ onUnmounted(() => clearInterval(timer))
     <el-row v-else :gutter="16">
       <el-col v-for="c in cameras" :key="c.id" :span="12" class="cell">
         <el-card shadow="never" :body-style="{ padding: '0' }" :class="{ selected: selected && c.id === selected.id }">
-          <div class="stage" @click="select(c)">
+          <div class="stage" @click="focus(c)">
             <el-tag :type="c.online ? 'success' : 'info'" size="small" class="tag">
               {{ c.online ? '在线' : '离线' }}
             </el-tag>
@@ -164,10 +170,15 @@ onUnmounted(() => clearInterval(timer))
         </el-card>
       </el-col>
     </el-row>
+
+    <el-dialog v-model="detailVisible" :title="selected ? selected.name : '画面详情'" width="78%" top="5vh" destroy-on-close>
+      <img v-if="selected" :src="streamUrl(selected.id)" class="dialog-frame" :alt="selected.name" />
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
+.monitor { position: relative; min-height: 420px; }
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 .hint { color: #9aa2b0; font-size: 12px; margin-right: auto; }
 .stage { height: 260px; background: #10131a; color: #fff; position: relative; overflow: hidden; cursor: pointer; }
@@ -185,7 +196,20 @@ onUnmounted(() => clearInterval(timer))
 .meta { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; color: #4b5563; }
 .location { margin-left: 8px; color: #9aa2b0; font-size: 12px; }
 .cell { margin-bottom: 16px; }
-.focus-card { margin-bottom: 14px; }
+.focus-layout { display: flex; gap: 14px; align-items: flex-start; }
+.focus-card { flex: 1; min-width: 0; margin-bottom: 0; }
+.focus-side {
+  width: 190px; flex: 0 0 190px; display: flex; flex-direction: column; gap: 10px;
+  max-height: calc(100vh - 210px); overflow-y: auto; padding-right: 2px;
+}
+.focus-side .thumb { width: 100%; }
+.focus-side .thumb img { height: 92px; }
+.dialog-frame { width: 100%; max-height: 75vh; object-fit: contain; background: #000; display: block; }
+@media (max-width: 1100px) {
+  .focus-layout { flex-direction: column; }
+  .focus-side { width: 100%; flex: 0 0 auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; max-height: none; }
+  .focus-side .thumb { width: 160px; flex: 0 0 160px; }
+}
 .thumbs { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; }
 .thumb {
   width: 168px; flex: 0 0 auto; border: 2px solid transparent; border-radius: 6px; overflow: hidden;

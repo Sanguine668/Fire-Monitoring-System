@@ -1,23 +1,32 @@
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
 async function request(url, options = {}) {
-  const opts = { ...options }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 12000)
+  const opts = { ...options, signal: controller.signal }
   if (opts.body && typeof opts.body === 'string' && !opts.headers) {
     opts.headers = JSON_HEADERS
   }
-  const res = await fetch(url, opts)
-  if (!res.ok) {
-    let detail = `HTTP ${res.status}`
-    try {
-      const data = await res.json()
-      detail = data.detail || detail
-    } catch {
-      /* 保留默认错误信息 */
+  try {
+    const res = await fetch(url, opts)
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`
+      try {
+        const data = await res.json()
+        detail = data.detail || detail
+      } catch {
+        /* 保留默认错误信息 */
+      }
+      throw new Error(detail)
     }
-    throw new Error(detail)
+    const type = res.headers.get('content-type') || ''
+    return type.includes('application/json') ? res.json() : res.text()
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('请求超时，请检查后端是否在线')
+    throw error
+  } finally {
+    clearTimeout(timer)
   }
-  const type = res.headers.get('content-type') || ''
-  return type.includes('application/json') ? res.json() : res.text()
 }
 
 export const api = {

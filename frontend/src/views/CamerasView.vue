@@ -100,7 +100,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div v-loading="loading">
+  <div v-loading="loading" class="cameras">
     <div class="toolbar">
       <el-button type="primary" @click="uploadVisible = true">上传本地视频</el-button>
       <el-button @click="addVisible = true">添加手机 / RTSP 视频源</el-button>
@@ -189,6 +189,7 @@ onMounted(load)
 </template>
 
 <style scoped>
+.cameras { position: relative; min-height: 400px; }
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .hint { color: #9aa2b0; font-size: 12px; }
 .preview-tools { margin-bottom: 10px; }

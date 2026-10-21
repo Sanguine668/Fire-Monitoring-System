@@ -142,6 +142,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.dashboard { position: relative; min-height: 400px; }
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .hint { color: #9aa2b0; font-size: 12px; }
 .metric span { color: #7b8494; }
