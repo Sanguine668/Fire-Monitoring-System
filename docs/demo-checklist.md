@@ -6,7 +6,7 @@
 - 官方 test：mAP50 0.724，mAP50-95 0.400
 - 默认阈值：fire 0.40，smoke 0.45
 - 默认开启：远距离切片（640 瓦片、20% 重叠、每 2 秒）、告警局部复核
-- 已验证视频源：本地火灾视频、模拟 IP Webcam HTTP 流、远景视频
+- 已验证视频源：本地火灾视频、模拟 IP Webcam HTTP 流、远景视频；模拟手机流已换成“日落/路灯/蒸汽/普通场景 + 真实火情”的混合视频
 - 后端：FastAPI 8000 端口；前端已构建并由后端直接托管
 
 ## 2. 启动系统
@@ -58,7 +58,7 @@ curl http://192.168.43.1:8080/shot.jpg -o shot.jpg
 ## 4. 建议演示顺序（5–7 分钟）
 
 1. **总览页**：展示模型 `smoke + fire`、远距离开、告警复核开、在线视频源数量；
-2. **智能体协同页**：展示感知 / 远场 / 时序 / 复核 / 决策五个 Agent 的实时状态、最新决策轨迹和指标；
+2. **智能体协同页**：展示感知 / 远场 / 时序 / 复核 / 决策五个 Agent 的实时状态、最新决策轨迹和指标；右上角可切换视频源、暂停刷新（默认 3 秒采样，避免数字乱跳）；
 3. **实时监控**：焦点模式下展示主画面 + 右侧缩略图；指出 fire/smoke 框、FPS、“智能体链路”状态条和远距离扫描标记；
 4. **手机画面**：用 IP Webcam 实时拍一段烟雾/火焰视频（或手机屏幕上的火情视频），展示端到端识别；
 5. **系统设置**：展示 fire 0.40 / smoke 0.45、切片 640 / 20% / 2 秒、复核阈值 0.25；
@@ -78,7 +78,7 @@ curl http://192.168.43.1:8080/shot.jpg -o shot.jpg
 没有手机或网络不通时，用本机模拟 IP Webcam：
 
 ```powershell
-ai\.venv\Scripts\python scripts\mock_phone_cam.py storage\uploads\demo_fire.mp4 8080
+ai\.venv\Scripts\python scripts\mock_phone_cam.py storage\uploads\demo_mixed.mp4 8080
 ```
 
 然后在系统里添加 `http://127.0.0.1:8080/video` 作为 HTTP 视频源。

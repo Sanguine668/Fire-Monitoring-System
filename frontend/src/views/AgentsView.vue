@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../api'
@@ -13,6 +13,7 @@ const cameras = ref([])
 const sample = ref(null)
 const recent = ref([])
 const paused = ref(false)
+const selectedCameraId = ref(null)
 let timer = null
 
 const latest = computed(() => sample.value)
@@ -118,9 +119,14 @@ function nodeState(key) {
 
 function syncSample() {
   if (paused.value) return
-  sample.value = realtime.traces[0] || null
-  recent.value = realtime.traces.slice(0, 10)
+  const source = selectedCameraId.value
+    ? realtime.traces.filter((trace) => trace.camera_id === selectedCameraId.value)
+    : realtime.traces
+  sample.value = source[0] || null
+  recent.value = source.slice(0, 10)
 }
+
+watch(selectedCameraId, () => syncSample())
 
 function togglePause() {
   paused.value = !paused.value
@@ -133,6 +139,9 @@ async function load() {
     const [agentInfo, cameraList] = await Promise.all([api.agents(), api.cameras()])
     info.value = agentInfo
     cameras.value = cameraList
+    if (!selectedCameraId.value && cameraList.length) {
+      selectedCameraId.value = (cameraList.find((camera) => camera.online) || cameraList[0]).id
+    }
   } catch (error) {
     ElMessage.error(`加载智能体信息失败：${error.message}`)
   } finally {
@@ -151,9 +160,11 @@ onUnmounted(() => clearInterval(timer))
 <template>
   <div v-loading="loading" class="agents-page">
     <div class="page-head">
-      <div>
-        <h2>多智能体协同检测</h2>
-        <p>五个专业化 Agent 按流水线协作，每个结论都带可解释证据</p>
+      <div class="head-left">
+        <span class="toolbar-hint">感知 → 远场 → 时序 → 复核 → 决策</span>
+        <el-select v-model="selectedCameraId" size="small" style="width: 170px" placeholder="选择视频源">
+          <el-option v-for="camera in cameras" :key="camera.id" :label="camera.name" :value="camera.id" />
+        </el-select>
       </div>
       <div class="head-actions">
         <el-tag :type="paused ? 'info' : 'success'" effect="dark" size="small">
@@ -225,12 +236,9 @@ onUnmounted(() => clearInterval(timer))
             <span>{{ latest ? `${latest.fps ?? '—'} FPS` : '—' }}</span>
           </div>
           <div class="decision-rows">
-            <div><span>感知</span><b>{{ latest?.agents?.perception?.objects ?? '—' }} 个候选</b></div>
-            <div><span>远场</span><b>{{ latest?.agents?.farfield?.active ? '切片扫描' : '整图模式' }}</b></div>
             <div><span>复核</span><b>{{ verifyText }}</b></div>
             <div><span>告警</span><b>{{ latest?.agents?.decision?.alarm ? '已生成' : '未触发' }}</b></div>
           </div>
-          <p class="decision-note">主链路本地运行，不依赖云端大模型；VLM 只作为可选灰区复核。</p>
         </el-card>
       </el-col>
     </el-row>
@@ -283,12 +291,15 @@ onUnmounted(() => clearInterval(timer))
 
 <style scoped>
 .agents-page { position: relative; min-height: 480px; }
-.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-.page-head h2 { margin: 0 0 4px; font-size: 20px; }
-.page-head p { margin: 0; color: #8b93a1; font-size: 13px; }
+.agents-page :deep(.el-row) { align-items: stretch; }
+.agents-page :deep(.el-col) { display: flex; }
+.pipeline-panel, .decision-panel { height: 100%; flex: 1; }
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.head-left { display: flex; align-items: center; gap: 10px; }
+.toolbar-hint { color: #8b93a1; font-size: 13px; }
 .head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; }
-.sub { color: #9aa2b0; font-size: 12px; }
+.sub { color: #9aa2b0; font-size: 13px; }
 .pipeline { display: flex; align-items: stretch; gap: 2px; padding: 10px 0 14px; }
 .node {
   flex: 1; min-width: 0; padding: 10px; border: 1px solid #e5e7eb; border-left: 3px solid #c0c4cc;
@@ -299,37 +310,37 @@ onUnmounted(() => clearInterval(timer))
 .node.state-warn { border-left-color: #e6a23c; }
 .node.state-danger { border-left-color: #e5484d; }
 .node-top { display: flex; align-items: center; gap: 6px; }
-.node-num { color: #1f4d78; font-weight: 700; font-size: 11px; }
-.node-top b { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.node-role { color: #9aa2b0; font-size: 11px; margin: 4px 0 8px; }
-.node-status { color: #303133; font-size: 12px; font-weight: 600; min-height: 18px; }
+.node-num { color: #1f4d78; font-weight: 700; font-size: 12px; }
+.node-top b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.node-role { color: #9aa2b0; font-size: 12px; margin: 4px 0 8px; }
+.node-status { color: #303133; font-size: 13px; font-weight: 600; min-height: 18px; }
 .connector { align-self: center; color: #c0c4cc; font-size: 18px; padding: 0 2px; }
 .evidence { border-top: 1px dashed #e5e7eb; padding-top: 12px; }
-.evidence-title { display: flex; align-items: baseline; gap: 8px; font-weight: 600; font-size: 13px; margin-bottom: 8px; }
-.evidence-title span { color: #9aa2b0; font-weight: 400; font-size: 11px; }
-.evidence-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 12px; color: #606776; }
+.evidence-title { display: flex; align-items: baseline; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+.evidence-title span { color: #9aa2b0; font-weight: 400; font-size: 12px; }
+.evidence-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 13px; color: #606776; }
 .evidence-row b { width: 74px; flex: 0 0 74px; color: #303133; }
 .evidence-dot { width: 6px; height: 6px; border-radius: 50%; background: #1f4d78; flex: 0 0 6px; }
 .empty { color: #9aa2b0; font-size: 12px; padding: 10px 0; }
 .gauge { display: flex; justify-content: center; padding: 4px 0 2px; }
 .gauge-value { font-size: 28px; font-weight: 700; color: #1f2d3d; }
 .gauge-label { color: #9aa2b0; font-size: 12px; }
-.decision-meta { display: flex; justify-content: space-around; color: #8b93a1; font-size: 12px; margin: 4px 0 12px; }
+.decision-meta { display: flex; justify-content: space-around; color: #8b93a1; font-size: 13px; margin: 4px 0 12px; }
 .decision-rows { display: grid; gap: 8px; }
-.decision-rows div { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 8px; background: #fafbfc; border-radius: 6px; }
+.decision-rows div { display: flex; justify-content: space-between; font-size: 14px; padding: 8px 10px; background: #fafbfc; border-radius: 6px; }
 .decision-rows span { color: #8b93a1; }
 .decision-rows b { color: #303133; }
-.decision-note { color: #9aa2b0; font-size: 11px; line-height: 1.6; margin: 12px 0 0; }
 .metric-band {
   display: flex; gap: 0; margin-top: 16px; background: #fff; border: 1px solid #e5e7eb;
   border-radius: 8px; overflow: hidden;
 }
 .metric-block { flex: 1; padding: 12px 16px; border-right: 1px solid #eef0f4; }
 .metric-block:last-child { border-right: none; }
-.metric-block span { display: block; color: #8b93a1; font-size: 11px; }
+.metric-block span { display: block; color: #8b93a1; font-size: 12px; }
 .metric-block strong { display: block; font-size: 20px; margin: 4px 0 2px; color: #1f2d3d; }
-.metric-block small { color: #a8b0bd; font-size: 11px; }
+.metric-block small { color: #a8b0bd; font-size: 12px; }
 .recent-panel { margin-top: 16px; }
+.recent-panel :deep(.el-table) { font-size: 13px; }
 @media (max-width: 1200px) {
   .pipeline { flex-wrap: wrap; }
   .node { flex: 1 1 150px; }
