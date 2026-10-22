@@ -9,7 +9,6 @@ import { useRealtime } from '../composables/useRealtime'
 const { realtime } = useRealtime()
 const loading = ref(false)
 const dashboard = ref({ camera_count: 0, online_count: 0, today_alarms: 0, unhandled: 0, recent: [] })
-const alarmList = ref([])
 const model = ref({ classes: {} })
 const settings = ref({})
 
@@ -26,45 +25,62 @@ const metrics = computed(() => [
 ])
 
 const trend = computed(() => {
-  const days = []
-  const counts = []
-  for (let i = 6; i >= 0; i -= 1) {
+  if (dashboard.value.trend?.length) return dashboard.value.trend
+  return Array.from({ length: 7 }, (_, i) => {
     const date = new Date()
-    date.setDate(date.getDate() - i)
-    const key = date.toISOString().slice(0, 10)
-    days.push(`${date.getMonth() + 1}/${date.getDate()}`)
-    counts.push(alarmList.value.filter((item) => (item.created_at || '').startsWith(key)).length)
-  }
-  return { days, counts }
+    date.setDate(date.getDate() - (6 - i))
+    return { label: `${date.getMonth() + 1}/${date.getDate()}`, fire: 0, smoke: 0, total: 0 }
+  })
 })
 
 let chart = null
 
 function renderChart() {
   if (!chart) chart = echarts.init(document.getElementById('trendChart'))
+  const data = trend.value
   chart.setOption({
     tooltip: { trigger: 'axis' },
-    grid: { left: 40, right: 20, top: 30, bottom: 30 },
-    xAxis: { type: 'category', data: trend.value.days },
+    legend: { top: 0, data: ['明火', '烟雾', '总告警'] },
+    grid: { left: 48, right: 20, top: 42, bottom: 30 },
+    xAxis: { type: 'category', data: data.map((item) => item.label) },
     yAxis: { type: 'value', minInterval: 1 },
-    series: [{
-      name: '告警数',
-      type: 'bar',
-      barWidth: 28,
-      data: trend.value.counts,
-      itemStyle: { color: '#e5484d', borderRadius: [4, 4, 0, 0] }
-    }]
-  })
+    series: [
+      {
+        name: '明火',
+        type: 'bar',
+        stack: 'alarm',
+        barWidth: 22,
+        data: data.map((item) => item.fire),
+        itemStyle: { color: '#e5484d' }
+      },
+      {
+        name: '烟雾',
+        type: 'bar',
+        stack: 'alarm',
+        barWidth: 22,
+        data: data.map((item) => item.smoke),
+        itemStyle: { color: '#e6a23c', borderRadius: [4, 4, 0, 0] }
+      },
+      {
+        name: '总告警',
+        type: 'line',
+        smooth: true,
+        symbolSize: 7,
+        data: data.map((item) => item.total),
+        itemStyle: { color: '#1f4d78' },
+        lineStyle: { width: 2 }
+      }
+    ]
+  }, true)
 }
 
 async function load() {
   loading.value = true
   try {
-    const [dash, alarms, modelInfo, currentSettings] = await Promise.all([
-      api.dashboard(), api.alarms(200), api.modelInfo(), api.settings()
+    const [dash, modelInfo, currentSettings] = await Promise.all([
+      api.dashboard(), api.modelInfo(), api.settings()
     ])
     dashboard.value = dash
-    alarmList.value = alarms
     model.value = modelInfo
     settings.value = currentSettings
     renderChart()

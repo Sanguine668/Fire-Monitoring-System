@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from .config import DB_PATH
@@ -19,6 +19,23 @@ def _conn() -> sqlite3.Connection:
 
 def now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _bump_daily(c: sqlite3.Connection, day: str, alarm_type: str, handled: int = 0) -> None:
+    fire = 1 if alarm_type == "fire" else 0
+    smoke = 1 if alarm_type == "smoke" else 0
+    c.execute(
+        """
+        INSERT INTO alarm_daily(day, fire_count, smoke_count, handled_count, total_count)
+        VALUES(?,?,?,?,1)
+        ON CONFLICT(day) DO UPDATE SET
+            fire_count=fire_count+excluded.fire_count,
+            smoke_count=smoke_count+excluded.smoke_count,
+            handled_count=handled_count+excluded.handled_count,
+            total_count=total_count+1
+        """,
+        (day, fire, smoke, handled),
+    )
 
 
 def init_db() -> None:
@@ -53,6 +70,13 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS alarm_daily (
+                day TEXT PRIMARY KEY,
+                fire_count INTEGER NOT NULL DEFAULT 0,
+                smoke_count INTEGER NOT NULL DEFAULT 0,
+                handled_count INTEGER NOT NULL DEFAULT 0,
+                total_count INTEGER NOT NULL DEFAULT 0
             );
             """
         )
@@ -156,6 +180,7 @@ def create_alarm(
             " VALUES(?,?,?,?,?,?,'unhandled',1,?,?)",
             (camera_id, camera_name, alarm_type, level, confidence, created, verified, created),
         )
+        _bump_daily(c, created[:10], alarm_type)
         return {
             "id": int(cur.lastrowid),
             "camera_id": camera_id,
@@ -237,14 +262,35 @@ def dashboard_stats() -> dict[str, Any]:
     with _conn() as c:
         camera_count = c.execute("SELECT COUNT(*) n FROM cameras").fetchone()["n"]
         online_count = c.execute("SELECT COUNT(*) n FROM cameras WHERE online=1").fetchone()["n"]
-        today = datetime.now().strftime("%Y-%m-%d") + "%"
+        now = datetime.now()
+        today = now.strftime("%Y-%m-%d") + "%"
         alarm_count = c.execute("SELECT COUNT(*) n FROM alarms WHERE created_at LIKE ?", (today,)).fetchone()["n"]
         unhandled = c.execute("SELECT COUNT(*) n FROM alarms WHERE status='unhandled'").fetchone()["n"]
         recent = [dict(r) for r in c.execute("SELECT * FROM alarms ORDER BY id DESC LIMIT 5").fetchall()]
+        days = [now.date() - timedelta(days=i) for i in range(6, -1, -1)]
+        daily = {
+            row["day"]: dict(row)
+            for row in c.execute(
+                "SELECT * FROM alarm_daily WHERE day>=? ORDER BY day",
+                (days[0].isoformat(),),
+            ).fetchall()
+        }
+        trend = []
+        for day in days:
+            row = daily.get(day.isoformat(), {})
+            trend.append({
+                "date": day.isoformat(),
+                "label": f"{day.month}/{day.day}",
+                "fire": int(row.get("fire_count", 0)),
+                "smoke": int(row.get("smoke_count", 0)),
+                "handled": int(row.get("handled_count", 0)),
+                "total": int(row.get("total_count", 0)),
+            })
     return {
         "camera_count": camera_count,
         "online_count": online_count,
         "today_alarms": alarm_count,
         "unhandled": unhandled,
         "recent": recent,
+        "trend": trend,
     }
