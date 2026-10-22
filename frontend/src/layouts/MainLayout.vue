@@ -5,7 +5,7 @@ import { useRealtime } from '../composables/useRealtime'
 
 const route = useRoute()
 const router = useRouter()
-const { realtime, unhandledCount } = useRealtime()
+const { realtime, unreadCount, markAllSeen } = useRealtime()
 const now = ref(new Date())
 const timer = setInterval(() => (now.value = new Date()), 1000)
 onUnmounted(() => clearInterval(timer))
@@ -23,6 +23,11 @@ const menus = [
 
 function go(path) {
   router.push(path)
+}
+
+function openAlarms() {
+  markAllSeen()
+  router.push('/alarms')
 }
 </script>
 
@@ -51,8 +56,8 @@ function go(path) {
         <div class="status">
           <span class="dot" :class="{ online: realtime.connected }" />
           <span class="status-text">{{ realtime.connected ? '实时通道已连接' : '实时通道未连接' }}</span>
-          <el-badge v-if="unhandledCount > 0" :value="unhandledCount" class="badge">
-            <el-button text type="danger" size="small" class="alarm-entry" @click="go('/alarms')">
+          <el-badge v-if="unreadCount > 0" :value="unreadCount" class="badge">
+            <el-button text type="danger" size="small" class="alarm-entry" @click="openAlarms">
               本次会话新告警
             </el-button>
           </el-badge>

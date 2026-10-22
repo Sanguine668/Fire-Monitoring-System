@@ -6,7 +6,7 @@ import * as echarts from 'echarts'
 import { api } from '../api'
 import { useRealtime } from '../composables/useRealtime'
 
-const { realtime } = useRealtime()
+const { realtime, markAllSeen, markHandled, syncAlarms, clearSessionAlarms } = useRealtime()
 const rows = ref([])
 const loading = ref(false)
 const statusTab = ref('unhandled')
@@ -109,6 +109,8 @@ async function load(showError = true) {
   loading.value = true
   try {
     rows.value = await api.alarms(500)
+    syncAlarms(rows.value)
+    markAllSeen()
   } catch (error) {
     if (showError) ElMessage.error(`加载告警失败：${error.message}`)
   } finally {
@@ -120,6 +122,7 @@ async function clearAll() {
   try {
     await ElMessageBox.confirm('确定清空全部告警记录？该操作不可恢复。', '清空告警', { type: 'warning' })
     const result = await api.clearAlarms()
+    clearSessionAlarms()
     ElMessage.success(`已清空 ${result.deleted ?? 0} 条告警`)
     await load(false)
   } catch (error) {
@@ -139,8 +142,10 @@ async function ack(row) {
     )
     if (row.count > 1 || statusTab.value === 'unhandled') {
       await api.ackAlarmGroup({ camera_id: row.camera_id, alarm_type: row.alarm_type })
+      markHandled({ camera_id: row.camera_id, alarm_type: row.alarm_type })
     } else {
       await api.ackAlarm(row.id)
+      markHandled({ id: row.id })
     }
     ElMessage.success('已确认处理')
     detailVisible.value = false
@@ -163,6 +168,7 @@ async function ackGroup(level) {
   try {
     await ElMessageBox.confirm(`该分组共 ${total} 条告警（合并后 ${targets.length} 个事件），确认全部处理？`, '批量处理', { type: 'warning' })
     await Promise.all(targets.map((r) => api.ackAlarmGroup({ camera_id: r.camera_id, alarm_type: r.alarm_type })))
+    targets.forEach((row) => markHandled({ camera_id: row.camera_id, alarm_type: row.alarm_type }))
     ElMessage.success(`已处理 ${total} 条告警`)
     await load(false)
   } catch (error) {
@@ -256,7 +262,10 @@ watch(rows, () => nextTick(renderCharts))
 watch(
   () => realtime.lastAlarm,
   (alarm) => {
-    if (alarm) load(false)
+    if (alarm) {
+      markAllSeen()
+      load(false)
+    }
   }
 )
 

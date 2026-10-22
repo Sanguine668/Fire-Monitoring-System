@@ -45,9 +45,10 @@ function connect() {
       }
       state.lastDetectionAt = Date.now()
     } else if (data.event === 'alarm') {
-      state.alarms.unshift(data.alarm)
+      const alarm = { ...data.alarm, seen: false }
+      state.alarms.unshift(alarm)
       state.alarms = state.alarms.slice(0, 200)
-      state.lastAlarm = data.alarm
+      state.lastAlarm = alarm
     } else if (data.event === 'camera_online' || data.event === 'camera_offline') {
       state.detections[data.camera_id] = {
         ...(state.detections[data.camera_id] || {}),
@@ -66,10 +67,60 @@ function connect() {
   }
 }
 
+const unreadCount = computed(
+  () => new Set(
+    state.alarms
+      .filter((item) => !item.seen && item.status === 'unhandled')
+      .map((item) => item.id)
+  ).size
+)
+const unhandledCount = computed(
+  () => new Set(
+    state.alarms
+      .filter((item) => item.status === 'unhandled')
+      .map((item) => item.id)
+  ).size
+)
+
+function markAllSeen() {
+  state.alarms.forEach((item) => {
+    item.seen = true
+  })
+}
+
+function markHandled({ id, camera_id, alarm_type }) {
+  state.alarms.forEach((item) => {
+    const sameId = id !== undefined && item.id === id
+    const sameGroup = camera_id !== undefined
+      && item.camera_id === camera_id
+      && item.alarm_type === alarm_type
+    if (sameId || sameGroup) {
+      item.status = 'handled'
+      item.seen = true
+    }
+  })
+}
+
+function syncAlarms(rows) {
+  const byId = new Map((rows || []).map((row) => [row.id, row]))
+  state.alarms = state.alarms
+    .filter((item) => byId.has(item.id))
+    .map((item) => ({ ...byId.get(item.id), seen: item.seen ?? true }))
+}
+
+function clearSessionAlarms() {
+  state.alarms = []
+}
+
 export function useRealtime() {
   if (!socket) connect()
   return {
     realtime: state,
-    unhandledCount: computed(() => state.alarms.filter((item) => item.status === 'unhandled').length)
+    unreadCount,
+    unhandledCount,
+    markAllSeen,
+    markHandled,
+    syncAlarms,
+    clearSessionAlarms
   }
 }
