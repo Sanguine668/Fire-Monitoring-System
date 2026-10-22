@@ -39,6 +39,7 @@ class DetectionWorker(threading.Thread):
         self._last_tile_ts = 0.0
         self._tile_objects: list[dict[str, Any]] = []
         self._tile_expire = 0.0
+        self._last_event_ts = 0.0
 
     def stop(self) -> None:
         self._stop.set()
@@ -184,7 +185,10 @@ class DetectionWorker(threading.Thread):
                     "tiled": use_tiling,
                     "agents": trace,
                 }
-                self._send(payload)
+                # 视频保持 4 FPS，但 WebSocket 状态 2 秒一次即可，减少前端重渲染
+                if now - self._last_event_ts >= 0.5:
+                    self._send(payload)
+                    self._last_event_ts = now
                 if alarm is not None:
                     record = db.create_alarm(
                         self.camera_id,

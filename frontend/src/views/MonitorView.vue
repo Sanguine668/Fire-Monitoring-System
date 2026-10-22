@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { VideoCamera, Grid, Refresh, SwitchButton, FullScreen } from '@element-plus/icons-vue'
-import { api, streamUrl } from '../api'
+import { api, snapshotUrl, streamUrl } from '../api'
 import { useRealtime } from '../composables/useRealtime'
 
 const { realtime } = useRealtime()
@@ -14,8 +14,12 @@ const togglingId = ref(null)
 const maximized = ref(false)
 const detailVisible = ref(false)
 const agentSnapshot = ref(null)
+const overlaySnapshot = ref({})
+const thumbTick = ref(0)
 let timer = null
 let agentTimer = null
+let overlayTimer = null
+let thumbTimer = null
 
 const enabledCameras = computed(() => cameras.value.filter((c) => c.enabled))
 const selected = computed(
@@ -70,8 +74,21 @@ function detectionOf(id) {
   return realtime.detections[id] || null
 }
 
+function overlayOf(id) {
+  return overlaySnapshot.value[id] || null
+}
+
+function refreshOverlays() {
+  const next = {}
+  for (const camera of cameras.value) {
+    const data = realtime.detections[camera.id]
+    if (data) next[camera.id] = data
+  }
+  overlaySnapshot.value = next
+}
+
 function countType(id, type) {
-  return (detectionOf(id)?.objects || []).filter((o) => o.type === type).length
+  return (overlayOf(id)?.objects || []).filter((o) => o.type === type).length
 }
 
 onMounted(() => {
@@ -81,11 +98,16 @@ onMounted(() => {
   })
   refreshAgentSnapshot()
   agentTimer = setInterval(refreshAgentSnapshot, 2000)
+  refreshOverlays()
+  overlayTimer = setInterval(refreshOverlays, 1000)
+  thumbTimer = setInterval(() => { thumbTick.value += 1 }, 3000)
   timer = setInterval(() => load(false), 10000)
 })
 onUnmounted(() => {
   clearInterval(timer)
   clearInterval(agentTimer)
+  clearInterval(overlayTimer)
+  clearInterval(thumbTimer)
 })
 </script>
 
@@ -131,17 +153,19 @@ onUnmounted(() => {
       <div class="focus-layout">
         <el-card shadow="never" :body-style="{ padding: '0' }" class="focus-card">
           <div class="stage focus-stage" :class="{ maximized }">
-            <template v-if="selected && selected.enabled">
+            <template v-if="selected && selected.enabled && selected.online">
               <img :src="streamUrl(selected.id)" class="frame" :alt="selected.name" />
               <div class="overlay">
                 <span>{{ selected.name }}</span>
-                <span v-if="detectionOf(selected.id)">火 {{ countType(selected.id, 'fire') }} / 烟 {{ countType(selected.id, 'smoke') }}</span>
-                <span v-if="detectionOf(selected.id)">风险 {{ detectionOf(selected.id).risk_score }}</span>
-                <span v-if="detectionOf(selected.id)">{{ detectionOf(selected.id).fps }} FPS</span>
-                <span v-if="detectionOf(selected.id)?.tiled" class="tiled">远距离扫描</span>
+                <span v-if="overlayOf(selected.id)">火 {{ countType(selected.id, 'fire') }} / 烟 {{ countType(selected.id, 'smoke') }}</span>
+                <span v-if="overlayOf(selected.id)">风险 {{ overlayOf(selected.id).risk_score }}</span>
+                <span v-if="overlayOf(selected.id)">{{ overlayOf(selected.id).fps }} FPS</span>
+                <span v-if="overlayOf(selected.id)?.tiled" class="tiled">远距离扫描</span>
               </div>
             </template>
-            <div v-else class="placeholder">暂无可用的启用视频源</div>
+            <div v-else class="placeholder">
+              {{ selected && selected.enabled ? '视频源离线，等待重连…' : '暂无可用的启用视频源' }}
+            </div>
           </div>
           <div class="meta">
             <div>
@@ -168,8 +192,8 @@ onUnmounted(() => {
             :class="{ active: selected && c.id === selected.id, offline: !c.enabled }"
             @click="select(c)"
           >
-            <img v-if="c.enabled" :src="streamUrl(c.id, false)" :alt="c.name" />
-            <div v-else class="thumb-off">已停用</div>
+            <img v-if="c.enabled && c.online" :src="snapshotUrl(c.id, false) + '&t=' + thumbTick" :alt="c.name" />
+            <div v-else class="thumb-off">{{ c.enabled ? '等待画面' : '已停用' }}</div>
             <p>{{ c.name }}</p>
           </div>
         </div>
@@ -185,13 +209,14 @@ onUnmounted(() => {
               {{ c.online ? '在线' : '离线' }}
             </el-tag>
             <el-tag v-if="!c.enabled" type="warning" size="small" class="tag-right">已停用</el-tag>
-            <img v-if="c.enabled" :src="streamUrl(c.id)" class="frame" :alt="c.name" />
-            <div v-else class="placeholder">视频源已停用</div>
-            <div v-if="detectionOf(c.id)" class="overlay">
+            <img v-if="c.enabled && c.online" :src="snapshotUrl(c.id, true) + '&t=' + thumbTick" class="frame" :alt="c.name" />
+            <div v-else class="placeholder">{{ c.enabled ? '等待画面…' : '视频源已停用' }}</div>
+            <span v-if="c.enabled && c.online" class="live-hint">点击查看实时</span>
+            <div v-if="overlayOf(c.id)" class="overlay">
               <span>火 {{ countType(c.id, 'fire') }} / 烟 {{ countType(c.id, 'smoke') }}</span>
-              <span>风险 {{ detectionOf(c.id).risk_score }}</span>
-              <span>{{ detectionOf(c.id).fps }} FPS</span>
-              <span v-if="detectionOf(c.id).tiled" class="tiled">远距离扫描</span>
+              <span>风险 {{ overlayOf(c.id).risk_score }}</span>
+              <span>{{ overlayOf(c.id).fps }} FPS</span>
+              <span v-if="overlayOf(c.id).tiled" class="tiled">远距离扫描</span>
             </div>
           </div>
           <div class="meta">
@@ -235,6 +260,10 @@ onUnmounted(() => {
 .frame { width: 100%; height: 100%; object-fit: contain; display: block; }
 .tag { position: absolute; top: 8px; left: 8px; z-index: 2; }
 .tag-right { position: absolute; top: 8px; right: 8px; z-index: 2; }
+.live-hint {
+  position: absolute; right: 8px; bottom: 8px; z-index: 2; color: #e5e7eb; font-size: 12px;
+  background: rgba(0, 0, 0, .55); padding: 3px 7px; border-radius: 4px;
+}
 .placeholder { height: 100%; display: flex; align-items: center; justify-content: center; color: #aab2c0; }
 .overlay {
   position: absolute; left: 8px; bottom: 8px; display: flex; gap: 10px; font-size: 12px;

@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import db
@@ -357,6 +357,21 @@ def create_app() -> FastAPI:
 
         return StreamingResponse(gen(), media_type="multipart/x-mixed-replace; boundary=frame")
 
+    @app.get("/snapshot/{camera_id}")
+    def snapshot(camera_id: int, annotated: bool = True, reg: CameraRegistry = Depends(registry)):
+        """返回单帧 JPEG，供缩略图低频刷新，避免开多条 MJPEG 长连接。"""
+        worker = reg.workers.get(camera_id)
+        if not worker:
+            raise HTTPException(404, "worker not running")
+        frame = worker.latest_jpeg if annotated else worker.latest_raw_jpeg
+        if not frame:
+            raise HTTPException(404, "frame not ready")
+        return Response(
+            content=frame,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.websocket("/ws/events")
     async def ws_events(ws: WebSocket, reg: CameraRegistry = Depends(registry)):
         await reg.ws.connect(ws)
@@ -365,6 +380,10 @@ def create_app() -> FastAPI:
             while True:
                 await ws.receive_text()
         except WebSocketDisconnect:
+            pass
+        except Exception:
+            pass
+        finally:
             reg.ws.disconnect(ws)
 
     return app

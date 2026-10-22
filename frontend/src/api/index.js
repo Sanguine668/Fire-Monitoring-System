@@ -55,3 +55,4 @@ export const api = {
 }
 
 export const streamUrl = (cameraId, annotated = true) => `/stream/${cameraId}${annotated ? '' : '?annotated=false'}`
+export const snapshotUrl = (cameraId, annotated = true) => `/snapshot/${cameraId}?annotated=${annotated ? 'true' : 'false'}`
