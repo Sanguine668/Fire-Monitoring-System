@@ -11,7 +11,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "datasets" / "d-fire" / "test" / "images"
 OUT = ROOT / "storage" / "uploads" / "demo_farfield.mp4"
-START, COUNT, FPS = 7718, 150, 10
+START, COUNT, FPS = 8069, 150, 10
 
 
 def main() -> None:
