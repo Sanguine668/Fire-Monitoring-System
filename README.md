@@ -27,6 +27,7 @@ python scripts/setup_member.py --cuda --with-history
 ```
 
 脚本会自动创建 `ai/.venv`、安装依赖、`npm install` + 前端构建，并复制演示视频、初始化数据库和摄像头。
+如果系统没有 `python` 命令，把上面的 `python` 换成 `py`。所有后端命令都请在仓库根目录执行，这样相对路径的演示视频才能找到。
 
 启动：
 
