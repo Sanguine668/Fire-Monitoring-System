@@ -6,6 +6,45 @@
 - 周期：2026-09-03 ~ 2026-11-05（8 周）
 - 仓库：https://github.com/Sanguine668/Fire-Monitoring-System
 
+## 组员克隆后快速开始
+
+仓库已包含推理模型 `weights/fire26n-v2-best.pt` 和演示视频 `samples/*.mp4`，**不需要数据集即可运行系统**。
+
+环境：Windows 10/11、Python 3.12、Node.js 20+。NVIDIA 显卡可选，CPU 也能跑但速度更慢。
+
+```powershell
+git clone git@github.com:Sanguine668/Fire-Monitoring-System.git
+cd Fire-Monitoring-System
+
+# NVIDIA 显卡（安装 CUDA 12.8 版 torch）
+python scripts/setup_member.py --cuda
+
+# 没有 NVIDIA 显卡
+python scripts/setup_member.py
+
+# 想让总览页有 7 天演示趋势，加 --with-history
+python scripts/setup_member.py --cuda --with-history
+```
+
+脚本会自动创建 `ai/.venv`、安装依赖、`npm install` + 前端构建，并复制演示视频、初始化数据库和摄像头。
+
+启动：
+
+```powershell
+$env:FIREGUARD_DEVICE='0'   # 有 GPU 时用；CPU 可去掉
+ai\.venv\Scripts\python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+```
+
+浏览器打开 <http://127.0.0.1:8000>。
+
+模拟手机推流（可选，另开一个终端）：
+
+```powershell
+ai\.venv\Scripts\python scripts\mock_phone_cam.py storage\uploads\demo_mixed.mp4 8080
+```
+
+然后在「手机接入向导」中添加 `http://127.0.0.1:8080/video`。
+
 ## 目录结构
 
 | 目录 | 内容 | 说明 |
@@ -33,7 +72,7 @@ ai\.venv\Scripts\python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 80
 ```
 
 - `--host 0.0.0.0` 是手机接入的前提，否则手机访问不到电脑；
-- 模型默认路径：`ai/runs/fire26n-v2/weights/best.pt`（20 轮 D-Fire 双类模型）
+- 模型默认路径：`weights/fire26n-v2-best.pt`（仓库自带）；本地重新训练产物在 `ai/runs/fire26n-v2/weights/best.pt`
 - 接口文档：http://127.0.0.1:8000/docs
 - 主要接口：`/api/health`、`/api/network`、`/api/probe`、`/api/cameras`、`/api/uploads`、`/api/alarms`、`/api/settings`、`/api/dashboard`、`/stream/{id}`、`/ws/events`
 - 注意：本机 CPU 推理会因线程/内存限制报错，演示与调试请使用 GPU（`FIREGUARD_DEVICE=0`）

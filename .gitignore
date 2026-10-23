@@ -21,6 +21,7 @@ datasets/
 新增数据集/
 runs/
 *.pt
+!weights/fire26n-v2-best.pt
 *.weights
 *.onnx
 
