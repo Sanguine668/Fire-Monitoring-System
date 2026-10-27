@@ -46,3 +46,15 @@ def test_cleanup_old_frames_removes_only_expired() -> None:
     assert removed >= 1
     assert snapshots.resolve_frame(old_rel) is None
     assert snapshots.resolve_frame(new_rel) is not None
+
+
+def test_resolve_blocks_path_traversal_to_existing_file() -> None:
+    """越界路径必须被拦下；即使目标文件真实存在（靠 is_file 拦不住）也要返回 None。"""
+    outside_dir = SNAPSHOTS.parent / "outside"
+    outside_dir.mkdir(parents=True, exist_ok=True)
+    outside_file = outside_dir / "secret.jpg"
+    outside_file.write_bytes(b"secret")
+
+    assert outside_file.is_file()  # 直接 is_file 会命中，说明必须靠目录约束拦住
+    assert snapshots.resolve_frame("../outside/secret.jpg") is None
+    assert snapshots.resolve_frame(str(outside_file)) is None
