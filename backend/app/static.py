@@ -14,4 +14,9 @@ def mount_frontend(app: FastAPI) -> None:
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
-        return FileResponse(FRONTEND_DIST / "index.html")
+        # index.html 里引用的是带哈希的静态资源名，必须每次回源校验，
+        # 否则重新构建前端后浏览器可能仍加载旧资源，看到的是旧样式。
+        return FileResponse(
+            FRONTEND_DIST / "index.html",
+            headers={"Cache-Control": "no-cache, must-revalidate"},
+        )

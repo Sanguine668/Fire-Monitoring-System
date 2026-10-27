@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check, Delete, Download, Refresh, Search } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { api } from '../api'
+import { chartFont } from '../utils/chartFont'
 import { useRealtime } from '../composables/useRealtime'
 
 const { realtime, markAllSeen, markHandled, syncAlarms, clearSessionAlarms } = useRealtime()
@@ -220,8 +221,10 @@ function renderCharts() {
 
   const fire = rows.value.filter((r) => r.alarm_type === 'fire').length
   const smoke = rows.value.filter((r) => r.alarm_type === 'smoke').length
+  const font = chartFont()
   typeChart.setOption({
     tooltip: { trigger: 'item' },
+    textStyle: { fontSize: font },
     legend: { bottom: 0 },
     series: [{
       type: 'pie',
@@ -246,7 +249,8 @@ function renderCharts() {
   }
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
-    grid: { left: 32, right: 12, top: 20, bottom: 24 },
+    textStyle: { fontSize: font },
+    grid: { left: Math.round(font * 2.4), right: 12, top: 20, bottom: Math.round(font * 1.7) },
     xAxis: { type: 'category', data: days },
     yAxis: { type: 'value', minInterval: 1 },
     series: [{ type: 'line', smooth: true, areaStyle: {}, data: countsByDay, itemStyle: { color: '#1f4d78' } }]
@@ -314,7 +318,7 @@ onUnmounted(() => {
                 <el-radio-button value="handled">已处理（{{ counts.handled }}）</el-radio-button>
                 <el-radio-button value="all">全部（{{ counts.all }}）</el-radio-button>
               </el-radio-group>
-              <el-input v-model="keyword" placeholder="按视频源搜索" clearable style="width: 180px" :prefix-icon="Search" />
+              <el-input v-model="keyword" placeholder="按视频源搜索" clearable style="width: 220px" :prefix-icon="Search" />
               <el-button :icon="Refresh" @click="load()">刷新</el-button>
               <el-button :icon="Download" @click="exportCsv">导出</el-button>
               <el-button :icon="Delete" plain type="danger" @click="clearAll">清空</el-button>
@@ -344,7 +348,7 @@ onUnmounted(() => {
                 <el-table-column label="最近出现" width="170">
                   <template #default="{ row }">{{ row.latestAt || row.created_at }}</template>
                 </el-table-column>
-                <el-table-column prop="camera_name" label="视频源" min-width="150" show-overflow-tooltip />
+                <el-table-column prop="camera_name" label="视频源" min-width="190" show-overflow-tooltip />
                 <el-table-column label="累计次数" width="100">
                   <template #default="{ row }">
                     <el-tag v-if="row.count > 1" type="danger" size="small" effect="plain">{{ row.count }} 次</el-tag>
@@ -357,7 +361,7 @@ onUnmounted(() => {
                     <span v-else class="muted">—</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="最高置信度" width="170">
+                <el-table-column label="最高置信度" width="155">
                   <template #default="{ row }">
                     <el-progress :percentage="Math.round((row.maxConfidence || row.confidence || 0) * 100)" :stroke-width="8" color="#e5484d" />
                   </template>
@@ -411,7 +415,7 @@ onUnmounted(() => {
                 <el-table-column label="最近出现" width="170">
                   <template #default="{ row }">{{ row.latestAt || row.created_at }}</template>
                 </el-table-column>
-                <el-table-column prop="camera_name" label="视频源" min-width="150" show-overflow-tooltip />
+                <el-table-column prop="camera_name" label="视频源" min-width="190" show-overflow-tooltip />
                 <el-table-column label="累计次数" width="100">
                   <template #default="{ row }">
                     <el-tag v-if="row.count > 1" type="warning" size="small" effect="plain">{{ row.count }} 次</el-tag>
@@ -424,7 +428,7 @@ onUnmounted(() => {
                     <span v-else class="muted">—</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="最高置信度" width="170">
+                <el-table-column label="最高置信度" width="155">
                   <template #default="{ row }">
                     <el-progress :percentage="Math.round((row.maxConfidence || row.confidence || 0) * 100)" :stroke-width="8" color="#e6a23c" />
                   </template>
@@ -504,12 +508,12 @@ onUnmounted(() => {
 .tip { margin-bottom: 12px; }
 .metrics { margin-bottom: 16px; }
 .metric { display: flex; justify-content: space-between; align-items: center; }
-.metric span { color: #7b8494; font-size: 13px; }
-.metric strong { font-size: 24px; }
+.metric span { color: #7b8494; font-size: 0.9375rem; }
+.metric strong { font-size: 1.5rem; }
 .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .head .el-input { margin-left: auto; }
 .group-title { display: flex; align-items: center; gap: 10px; }
-.group-title b { font-size: 14px; color: #1f2937; }
+.group-title b { font-size: 1rem; color: #1f2937; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot.critical { background: #e5484d; }
 .dot.warning { background: #e6a23c; }

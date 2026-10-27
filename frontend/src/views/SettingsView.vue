@@ -91,7 +91,7 @@ onMounted(load)
       </el-form-item>
       <el-form-item label="告警二次复核">
         <el-switch v-model="form.verify_enabled" :active-value="1" :inactive-value="0" />
-        <span class="switch-hint">触发告警时放大局部区域再检测一次，复核不通过则抑制</span>
+        <span class="switch-hint is-wide">触发告警时放大局部区域再检测一次，复核不通过则抑制</span>
       </el-form-item>
       <el-form-item label="复核置信度阈值">
         <el-slider v-model="form.verify_threshold" :min="0.05" :max="0.9" :step="0.05" show-input />
@@ -127,5 +127,7 @@ onMounted(load)
 <style scoped>
 .tips { margin-bottom: 18px; }
 .section-title { font-weight: 600; color: #303133; margin: 4px 0 16px; }
-.switch-hint { margin-left: 12px; color: #9aa2b0; font-size: 12px; }
+.switch-hint { margin-left: 12px; color: #9aa2b0; font-size: 0.875rem; }
+/* 较长的说明文字单独占一行，避免最后一个字被挤到下一行 */
+.switch-hint.is-wide { flex: 1 0 100%; margin-left: 0; margin-top: 2px; }
 </style>

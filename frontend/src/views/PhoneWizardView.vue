@@ -259,9 +259,9 @@ onUnmounted(() => clearInterval(pollTimer))
 .tip { margin-bottom: 14px; }
 .step-card { margin-bottom: 14px; }
 .line { line-height: 1.9; color: #374151; margin: 6px 0; }
-.muted { color: #9aa2b0; font-size: 12px; margin: 6px 0; }
+.muted { color: #9aa2b0; font-size: 0.875rem; margin: 6px 0; }
 .addr { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
-.addr .ip { font-family: Consolas, monospace; font-size: 14px; }
+.addr .ip { font-family: Consolas, monospace; font-size: 1rem; }
 .probe { margin: 10px 0; }
 .preview { height: 300px; background: #10131a; border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .preview img { width: 100%; height: 100%; object-fit: contain; }

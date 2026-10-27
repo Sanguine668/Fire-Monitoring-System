@@ -259,10 +259,10 @@ onUnmounted(() => clearInterval(timer))
         </div>
       </template>
       <el-table :data="recent" size="small" empty-text="等待检测数据">
-        <el-table-column label="时间" width="84">
+        <el-table-column label="时间" width="112">
           <template #default="{ row }">{{ (row.timestamp || '').slice(11) }}</template>
         </el-table-column>
-        <el-table-column label="视频源" min-width="130">
+        <el-table-column label="视频源" min-width="150">
           <template #default="{ row }">{{ cameraName(row.camera_id) }}</template>
         </el-table-column>
         <el-table-column label="感知" width="70">
@@ -296,10 +296,10 @@ onUnmounted(() => clearInterval(timer))
 .pipeline-panel, .decision-panel { height: 100%; flex: 1; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .head-left { display: flex; align-items: center; gap: 10px; }
-.toolbar-hint { color: #8b93a1; font-size: 13px; }
+.toolbar-hint { color: #8b93a1; font-size: 0.9375rem; }
 .head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; }
-.sub { color: #9aa2b0; font-size: 13px; }
+.sub { color: #9aa2b0; font-size: 0.9375rem; }
 .pipeline { display: flex; align-items: stretch; gap: 2px; padding: 10px 0 14px; }
 .node {
   flex: 1; min-width: 0; padding: 10px; border: 1px solid #e5e7eb; border-left: 3px solid #c0c4cc;
@@ -310,24 +310,24 @@ onUnmounted(() => clearInterval(timer))
 .node.state-warn { border-left-color: #e6a23c; }
 .node.state-danger { border-left-color: #e5484d; }
 .node-top { display: flex; align-items: center; gap: 6px; }
-.node-num { color: #1f4d78; font-weight: 700; font-size: 12px; }
-.node-top b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.node-role { color: #9aa2b0; font-size: 12px; margin: 4px 0 8px; }
-.node-status { color: #303133; font-size: 13px; font-weight: 600; min-height: 18px; }
-.connector { align-self: center; color: #c0c4cc; font-size: 18px; padding: 0 2px; }
+.node-num { color: #1f4d78; font-weight: 700; font-size: 0.875rem; }
+.node-top b { font-size: 0.9375rem; white-space: normal; overflow: visible; }
+.node-role { color: #9aa2b0; font-size: 0.875rem; margin: 4px 0 8px; }
+.node-status { color: #303133; font-size: 0.9375rem; font-weight: 600; min-height: 18px; }
+.connector { align-self: center; color: #c0c4cc; font-size: 1.125rem; padding: 0 2px; }
 .evidence { border-top: 1px dashed #e5e7eb; padding-top: 12px; }
-.evidence-title { display: flex; align-items: baseline; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 8px; }
-.evidence-title span { color: #9aa2b0; font-weight: 400; font-size: 12px; }
-.evidence-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 13px; color: #606776; }
-.evidence-row b { width: 74px; flex: 0 0 74px; color: #303133; }
+.evidence-title { display: flex; align-items: baseline; gap: 8px; font-weight: 600; font-size: 1rem; margin-bottom: 8px; }
+.evidence-title span { color: #9aa2b0; font-weight: 400; font-size: 0.875rem; }
+.evidence-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 0.9375rem; color: #606776; }
+.evidence-row b { flex: 0 0 auto; min-width: 88px; white-space: nowrap; color: #303133; }
 .evidence-dot { width: 6px; height: 6px; border-radius: 50%; background: #1f4d78; flex: 0 0 6px; }
-.empty { color: #9aa2b0; font-size: 12px; padding: 10px 0; }
+.empty { color: #9aa2b0; font-size: 0.875rem; padding: 10px 0; }
 .gauge { display: flex; justify-content: center; padding: 4px 0 2px; }
-.gauge-value { font-size: 28px; font-weight: 700; color: #1f2d3d; }
-.gauge-label { color: #9aa2b0; font-size: 12px; }
-.decision-meta { display: flex; justify-content: space-around; color: #8b93a1; font-size: 13px; margin: 4px 0 12px; }
+.gauge-value { font-size: 1.75rem; font-weight: 700; color: #1f2d3d; }
+.gauge-label { color: #9aa2b0; font-size: 0.875rem; }
+.decision-meta { display: flex; justify-content: space-around; color: #8b93a1; font-size: 0.9375rem; margin: 4px 0 12px; }
 .decision-rows { display: grid; gap: 8px; }
-.decision-rows div { display: flex; justify-content: space-between; font-size: 14px; padding: 8px 10px; background: #fafbfc; border-radius: 6px; }
+.decision-rows div { display: flex; justify-content: space-between; font-size: 1rem; padding: 8px 10px; background: #fafbfc; border-radius: 6px; }
 .decision-rows span { color: #8b93a1; }
 .decision-rows b { color: #303133; }
 .metric-band {
@@ -336,11 +336,11 @@ onUnmounted(() => clearInterval(timer))
 }
 .metric-block { flex: 1; padding: 12px 16px; border-right: 1px solid #eef0f4; }
 .metric-block:last-child { border-right: none; }
-.metric-block span { display: block; color: #8b93a1; font-size: 12px; }
-.metric-block strong { display: block; font-size: 20px; margin: 4px 0 2px; color: #1f2d3d; }
-.metric-block small { color: #a8b0bd; font-size: 12px; }
+.metric-block span { display: block; color: #8b93a1; font-size: 0.875rem; }
+.metric-block strong { display: block; font-size: 1.25rem; margin: 4px 0 2px; color: #1f2d3d; }
+.metric-block small { color: #a8b0bd; font-size: 0.875rem; }
 .recent-panel { margin-top: 16px; }
-.recent-panel :deep(.el-table) { font-size: 13px; }
+.recent-panel :deep(.el-table) { font-size: 0.9375rem; }
 @media (max-width: 1200px) {
   .pipeline { flex-wrap: wrap; }
   .node { flex: 1 1 150px; }

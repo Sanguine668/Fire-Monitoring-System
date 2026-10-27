@@ -76,16 +76,16 @@ function openAlarms() {
 .aside { background: #12161f; }
 .brand { display: flex; gap: 10px; align-items: center; padding: 18px 16px; color: #fff; }
 .brand-mark { width: 36px; height: 36px; line-height: 36px; text-align: center; border-radius: 8px; background: #e5484d; font-weight: 700; }
-.brand small { display: block; color: #aab2c0; }
+.brand small { display: block; color: #aab2c0; font-size: 0.875rem; }
 .menu { border-right: none; }
 .header { display: flex; align-items: center; justify-content: space-between; background: #fff; border-bottom: 1px solid #e5e7eb; }
 .header h2 { margin: 0; }
-.header span { color: #7b8494; font-size: 13px; }
+.header span { color: #7b8494; font-size: 0.9375rem; }
 .clock { color: #4b5563; }
 .status { display: flex; align-items: center; gap: 10px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #c0c4cc; display: inline-block; }
 .dot.online { background: #23d18b; }
-.status-text { color: #7b8494; font-size: 12px; }
-.alarm-entry { font-size: 12px; padding: 0 2px; }
+.status-text { color: #7b8494; font-size: 0.875rem; }
+.alarm-entry { font-size: 0.875rem; padding: 0 10px 0 2px; }
 .main { background: #f3f5f8; }
 </style>

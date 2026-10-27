@@ -112,7 +112,7 @@ onMounted(load)
     <el-empty v-if="filteredCameras.length === 0" :description="cameras.length === 0 ? '暂无视频源' : '没有匹配的视频源'" />
     <el-table v-else :data="filteredCameras" stripe>
       <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column prop="name" label="名称" width="180" />
+      <el-table-column prop="name" label="名称" width="235" />
       <el-table-column prop="location" label="位置" width="160" />
       <el-table-column label="类型" width="90">
         <template #default="{ row }">
@@ -191,6 +191,6 @@ onMounted(load)
 <style scoped>
 .cameras { position: relative; min-height: 400px; }
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-.hint { color: #9aa2b0; font-size: 12px; }
+.hint { color: #9aa2b0; font-size: 0.875rem; }
 .preview-tools { margin-bottom: 10px; }
 </style>

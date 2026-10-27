@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { api } from '../api'
+import { chartFont } from '../utils/chartFont'
 import { useRealtime } from '../composables/useRealtime'
 
 const { realtime } = useRealtime()
@@ -38,10 +39,12 @@ let chart = null
 function renderChart() {
   if (!chart) chart = echarts.init(document.getElementById('trendChart'))
   const data = trend.value
+  const font = chartFont()
   chart.setOption({
     tooltip: { trigger: 'axis' },
+    textStyle: { fontSize: font },
     legend: { top: 0, data: ['明火', '烟雾', '总告警'] },
-    grid: { left: 48, right: 20, top: 42, bottom: 30 },
+    grid: { left: Math.round(font * 3.6), right: 20, top: Math.round(font * 3.1), bottom: Math.round(font * 2.1) },
     xAxis: { type: 'category', data: data.map((item) => item.label) },
     yAxis: { type: 'value', minInterval: 1 },
     series: [
@@ -160,13 +163,13 @@ onUnmounted(() => {
 <style scoped>
 .dashboard { position: relative; min-height: 400px; }
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.hint { color: #9aa2b0; font-size: 12px; }
+.hint { color: #9aa2b0; font-size: 0.875rem; }
 .metric span { color: #7b8494; }
-.metric strong { display: block; font-size: 26px; margin-top: 6px; }
-.metric small { font-size: 13px; color: #9aa2b0; margin-left: 4px; font-weight: 400; }
+.metric strong { display: block; font-size: 1.625rem; margin-top: 6px; }
+.metric small { font-size: 0.9375rem; color: #9aa2b0; margin-left: 4px; font-weight: 400; }
 .second-row { margin-top: 16px; }
 .recent-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed #eceff3; }
 .recent-item .camera { flex: 1; color: #374151; }
-.recent-item .time { color: #9aa2b0; font-size: 12px; }
+.recent-item .time { color: #9aa2b0; font-size: 0.875rem; }
 .empty { color: #9aa2b0; padding: 12px 0; }
 </style>
