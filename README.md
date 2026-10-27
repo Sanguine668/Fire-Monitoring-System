@@ -75,7 +75,7 @@ ai\.venv\Scripts\python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 80
 - `--host 0.0.0.0` 是手机接入的前提，否则手机访问不到电脑；
 - 模型默认路径：`weights/fire26n-v2-best.pt`（仓库自带）；本地重新训练产物在 `ai/runs/fire26n-v2/weights/best.pt`
 - 接口文档：http://127.0.0.1:8000/docs
-- 主要接口：`/api/health`、`/api/network`、`/api/probe`、`/api/cameras`、`/api/uploads`、`/api/alarms`、`/api/settings`、`/api/dashboard`、`/stream/{id}`、`/ws/events`
+- 主要接口：`/api/health`、`/api/network`、`/api/probe`、`/api/cameras`、`/api/uploads`、`/api/alarms`、`/api/alarms/{id}`、`/api/alarms/{id}/frame`、`/api/settings`、`/api/notify`、`/api/notify/test`、`/api/notify/reset`、`/api/dashboard`、`/stream/{id}`、`/ws/events`
 - 注意：本机 CPU 推理会因线程/内存限制报错，演示与调试请使用 GPU（`FIREGUARD_DEVICE=0`）
 
 ### 2. 前端（监控页面）
@@ -125,6 +125,14 @@ Windows 下 DataLoader 多进程会因页文件不足触发 `WinError 1455`，�
 - 告警复核：触发告警时放大局部区域做二次检测，复核不通过则抑制本次告警，降低单帧误报；
 - 两项参数都在「系统设置」页调整，监控页会在切片帧上显示「远距离扫描」标记；
 - 演示视频：`storage/uploads/demo_farfield.mp4`，由 `scripts/make_farfield_demo.py` 从 D-Fire 连续远景帧生成。
+
+### 6. 告警画面与手机推送
+
+- **告警画面**：触发告警时把已经画好检测框的那一帧存盘，每条告警留存「触发帧」（触发瞬间，固定不变）与「最近帧」（合并时刷新）两张图，同时记录框坐标 JSON；告警中心表格显示缩略图，详情抽屉可切换两张图并列出检测框，接口 `GET /api/alarms/{id}/frame?variant=first|latest`；
+- **快照存储**：`storage/snapshots/<视频源ID>/alarm_<告警ID>_<first|latest>.jpg`，保留 7 天，服务启动时自动清理；可用 `FIREGUARD_SNAPSHOTS` 指定其它目录；
+- **手机推送**：在「系统设置 → 告警推送」填 [Server酱](https://sct.ftqq.com/) 的 SendKey 并启用，告警会推到微信。推送按视频源去重——**同一路视频源本次运行只推第一条**（重启服务或点「重置推送记录」后恢复），内置每日上限（默认 5，免费版额度即 5 条/天），推送记录与失败原因在设置页可见；
+- **画面链接**：推送正文会带上局域网画面链接，手机与电脑连同一网络时微信里可直接看到图；取不到局域网地址时只发文字；
+- **配置项**：`notify_enabled`、`notify_sendkey`、`notify_name`、`notify_daily_limit`，均存本机 SQLite，接口只返回掩码；SendKey 等价于接收者的推送凭证，请勿提交到仓库或贴到公开场合。
 
 ## 课程交付物索引
 
