@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 
 const defaults = {
@@ -18,6 +18,11 @@ const defaults = {
 const form = ref({ ...defaults })
 const loading = ref(false)
 const saving = ref(false)
+
+const notify = ref({ enabled: 0, sendkey_masked: '', name: '', daily_limit: 5, configured: false, sent_today: 0, records: [], last_skip: '' })
+const notifyForm = ref({ enabled: 0, sendkey: '', name: '', daily_limit: 5 })
+const notifySaving = ref(false)
+const testing = ref(false)
 
 const thresholdFields = [
   { key: 'fire_threshold', label: '明火置信度阈值', min: 0.05, max: 0.99, step: 0.01 },
@@ -62,7 +67,69 @@ function reset() {
   form.value = { ...defaults }
 }
 
-onMounted(load)
+async function loadNotify() {
+  try {
+    const data = await api.notifyConfig()
+    notify.value = data
+    notifyForm.value = {
+      enabled: data.enabled,
+      sendkey: data.sendkey_masked,
+      name: data.name,
+      daily_limit: data.daily_limit
+    }
+  } catch (error) {
+    ElMessage.error(`读取推送配置失败：${error.message}`)
+  }
+}
+
+async function saveNotify() {
+  notifySaving.value = true
+  try {
+    const data = await api.saveNotify(notifyForm.value)
+    notify.value = data
+    notifyForm.value = {
+      enabled: data.enabled,
+      sendkey: data.sendkey_masked,
+      name: data.name,
+      daily_limit: data.daily_limit
+    }
+    ElMessage.success('推送配置已保存')
+  } catch (error) {
+    ElMessage.error(`保存失败：${error.message}`)
+  } finally {
+    notifySaving.value = false
+  }
+}
+
+async function testNotify() {
+  testing.value = true
+  try {
+    const result = await api.testNotify({})
+    if (result.ok) ElMessage.success('测试通知已发送，请查看微信')
+    else ElMessage.error(`发送失败：${result.message || '未知原因'}（code=${result.code}）`)
+    await loadNotify()
+  } catch (error) {
+    ElMessage.error(`测试失败：${error.message}`)
+  } finally {
+    testing.value = false
+  }
+}
+
+async function resetNotify() {
+  try {
+    await ElMessageBox.confirm('重置后，各视频源在本次运行中可再次收到推送。确定重置？', '重置推送记录', { type: 'warning' })
+    const result = await api.resetNotify()
+    ElMessage.success(`已重置 ${result.cleared} 条推送记录`)
+    await loadNotify()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(`重置失败：${error.message || error}`)
+  }
+}
+
+onMounted(() => {
+  load()
+  loadNotify()
+})
 </script>
 
 <template>
@@ -121,6 +188,55 @@ onMounted(load)
         <el-button @click="load">重新读取</el-button>
       </el-form-item>
     </el-form>
+
+    <el-divider />
+    <div class="section-title">告警推送</div>
+    <el-alert
+      type="warning"
+      :closable="false"
+      class="tips"
+      title="采用 Server酱 推送到微信：免费版每天 5 条，按视频源去重（同一路本次运行只推第一条）。修改配置后需点保存生效。"
+    />
+    <el-form label-width="180px" style="max-width: 760px">
+      <el-form-item label="启用推送">
+        <el-switch v-model="notifyForm.enabled" :active-value="1" :inactive-value="0" />
+        <span class="switch-hint">当前状态：{{ notify.enabled ? '已启用' : '未启用' }}</span>
+      </el-form-item>
+      <el-form-item label="SendKey">
+        <el-input v-model="notifyForm.sendkey" placeholder="在 sct.ftqq.com 微信扫码后获取" show-password />
+        <div class="switch-hint is-wide">
+          已配置：{{ notify.configured ? '是' : '否' }}；输入框显示的是掩码，不改动则保留原 Key。
+        </div>
+      </el-form-item>
+      <el-form-item label="接收人备注">
+        <el-input v-model="notifyForm.name" placeholder="如：组长手机" />
+      </el-form-item>
+      <el-form-item label="每日上限">
+        <el-input-number v-model="notifyForm.daily_limit" :min="1" :max="1000" />
+        <span class="switch-hint">今日已发送 {{ notify.sent_today }} 条</span>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" :loading="notifySaving" @click="saveNotify">保存推送配置</el-button>
+        <el-button :loading="testing" @click="testNotify">发送测试通知</el-button>
+        <el-button @click="resetNotify">重置推送记录</el-button>
+      </el-form-item>
+      <el-form-item v-if="notify.last_skip" label="最近一次跳过原因">
+        <span class="switch-hint is-wide">{{ notify.last_skip }}</span>
+      </el-form-item>
+    </el-form>
+    <div class="section-title">推送记录</div>
+    <el-table :data="notify.records" size="small" empty-text="本轮尚未推送任何视频源">
+      <el-table-column prop="created_at" label="时间" width="200" />
+      <el-table-column prop="title" label="标题" min-width="280" show-overflow-tooltip />
+      <el-table-column label="结果" width="120">
+        <template #default="{ row }">
+          <el-tag :type="row.ok ? 'success' : 'danger'" size="small" effect="plain">
+            {{ row.ok ? '成功' : '失败' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="message" label="返回信息" min-width="180" show-overflow-tooltip />
+    </el-table>
   </el-card>
 </template>
 
