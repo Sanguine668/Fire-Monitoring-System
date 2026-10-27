@@ -39,7 +39,7 @@ def test_render_message_strips_newlines_from_title() -> None:
 
 
 def test_render_message_includes_frame_url_when_base_given() -> None:
-    _, desp = render_message(_alarm(), base_url="http://192.168.1.5:8000")
+    _, desp = render_message(_alarm(snapshot_first="3/12_first.jpg"), base_url="http://192.168.1.5:8000")
     assert "http://192.168.1.5:8000/api/alarms/12/frame?variant=first" in desp
 
 
@@ -147,3 +147,9 @@ def test_serverchan_channel_handles_network_error(monkeypatch) -> None:
     result = ServerChanChannel("SCTabc").send("标题", "正文")
     assert result["ok"] is False
     assert "网络" in result["message"]
+
+
+def test_render_message_omits_image_without_snapshot() -> None:
+    title, desp = render_message(_alarm(), base_url="http://192.168.1.5:8000")
+    assert "/api/alarms/12/frame" not in desp
+    assert "未留存画面" in desp

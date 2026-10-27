@@ -42,11 +42,14 @@ def render_message(alarm: dict[str, Any], base_url: str = "") -> tuple[str, str]
         f"- **累计次数**：{count} 次",
         "",
     ]
-    if base_url:
+    frame_available = bool(alarm.get("snapshot_first"))
+    if base_url and frame_available:
         frame_url = f"{base_url}/api/alarms/{alarm.get('id')}/frame?variant=first"
         lines.append(f"![告警画面]({frame_url})")
         lines.append("")
         lines.append(f"> 打开系统查看：[{base_url}]({base_url}/#/alarms)")
+    elif base_url:
+        lines.append(f"> 本条告警未留存画面；打开系统查看：[{base_url}]({base_url}/#/alarms)")
     else:
         lines.append("> 未获取到局域网地址，画面请在系统内查看。")
     return title, "\n".join(lines)

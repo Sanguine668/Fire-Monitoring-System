@@ -15,7 +15,8 @@ from pydantic import BaseModel, Field
 
 from . import db
 from . import snapshots
-from .config import MODEL_PATH, UPLOADS
+from . import notify
+from .config import MODEL_PATH, PUBLIC_BASE, UPLOADS
 from .detector import YoloDetector
 from .events import WsManager
 from .static import mount_frontend
@@ -61,11 +62,12 @@ class CameraRegistry:
         self.workers: dict[int, DetectionWorker] = {}
         self.detector: YoloDetector | None = None
         self.ws = WsManager()
+        self.notifier: notify.Notifier | None = None
 
     def start_camera(self, camera: dict[str, Any]) -> None:
         if not camera["enabled"] or camera["id"] in self.workers:
             return
-        w = DetectionWorker(camera, self.detector, self.ws, db.get_settings)
+        w = DetectionWorker(camera, self.detector, self.ws, db.get_settings, notifier=self.notifier)
         self.workers[camera["id"]] = w
         w.start()
 
@@ -75,21 +77,57 @@ class CameraRegistry:
             w.stop()
 
 
+def _preferred_lan_ip() -> str:
+    """挑选最可能被手机访问到的本机 IPv4，优先 192.168 网段。"""
+    import socket
+
+    import psutil
+
+    addresses: list[str] = []
+    for _name, addrs in psutil.net_if_addrs().items():
+        for addr in addrs:
+            if addr.family != socket.AF_INET:
+                continue
+            ip = addr.address
+            if ip.startswith("127.") or ip.startswith("169.254."):
+                continue
+            addresses.append(ip)
+    if not addresses:
+        return ""
+    addresses.sort(key=lambda ip: {"192": 0, "10": 1, "172": 2}.get(ip.split(".")[0], 3))
+    return addresses[0]
+
+
+def _public_base_url() -> str:
+    """推送消息里使用的系统地址；配置了 FIREGUARD_PUBLIC_BASE 时优先用它。"""
+    if PUBLIC_BASE:
+        return PUBLIC_BASE.rstrip("/")
+    ip = _preferred_lan_ip()
+    return f"http://{ip}:8000" if ip else ""
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         db.init_db()
         if not MODEL_PATH.is_file():
             raise RuntimeError(f"模型不存在: {MODEL_PATH}，请先完成 AI 训练")
+        snapshots.cleanup_old_frames(days=7)
+        db.clear_notifications()  # 每次启动视为新一轮，各路视频源恢复可推
+        notifier = notify.Notifier(base_url_provider=_public_base_url)
+        notifier.start()
         registry = CameraRegistry()
+        registry.notifier = notifier
         registry.detector = YoloDetector(str(MODEL_PATH))
         registry.ws.set_loop(asyncio.get_running_loop())
         app.state.registry = registry
+        app.state.notifier = notifier
         for camera in db.list_cameras():
             registry.start_camera(camera)
         yield
         for w in list(registry.workers.values()):
             w.stop()
+        notifier.stop()
 
     app = FastAPI(title="FireGuard AI Backend", version="0.2.0", lifespan=lifespan)
     app.add_middleware(
