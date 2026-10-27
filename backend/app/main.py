@@ -49,6 +49,17 @@ class AckGroupPayload(BaseModel):
     alarm_type: str = Field(pattern="^(fire|smoke)$")
 
 
+class NotifyPayload(BaseModel):
+    enabled: int = Field(default=0, ge=0, le=1)
+    sendkey: str = ""
+    name: str = ""
+    daily_limit: int = Field(default=5, ge=1, le=1000)
+
+
+class NotifyTestPayload(BaseModel):
+    sendkey: str = ""
+
+
 class ProbePayload(BaseModel):
     source: str = Field(min_length=1)
 
@@ -391,6 +402,54 @@ def create_app() -> FastAPI:
         if count == 0:
             raise HTTPException(404, "no unhandled alarm found for this camera and type")
         return {"ok": True, "handled": count}
+
+    def _mask_key(key: str) -> str:
+        return f"****{key[-4:]}" if len(key) > 4 else ("****" if key else "")
+
+    def _notify_view() -> dict[str, Any]:
+        cfg = db.get_notify_config()
+        notifier = getattr(app.state, "notifier", None)
+        return {
+            "enabled": cfg["enabled"],
+            "sendkey_masked": _mask_key(cfg["sendkey"]),
+            "name": cfg["name"],
+            "daily_limit": cfg["daily_limit"],
+            "configured": bool(cfg["sendkey"]),
+            "sent_today": db.notifications_sent_today(),
+            "records": db.list_notifications(),
+            "last_skip": getattr(notifier, "last_skip", "") if notifier else "",
+        }
+
+    @app.get("/api/notify")
+    def notify_config() -> dict[str, Any]:
+        return _notify_view()
+
+    @app.put("/api/notify")
+    def save_notify(payload: NotifyPayload) -> dict[str, Any]:
+        current = db.get_notify_config()
+        sendkey = payload.sendkey.strip()
+        if "****" in sendkey:  # 前端回传的是掩码，保留原值
+            sendkey = current["sendkey"]
+        db.save_notify_config(payload.enabled, sendkey, payload.name.strip(), payload.daily_limit)
+        return _notify_view()
+
+    @app.post("/api/notify/test")
+    def notify_test(payload: NotifyTestPayload) -> dict[str, Any]:
+        cfg = db.get_notify_config()
+        sendkey = payload.sendkey.strip() or cfg["sendkey"]
+        if not sendkey:
+            return {"ok": False, "code": None, "message": "未配置 SendKey，请先填写并保存"}
+        title = "【火情监测】推送测试"
+        desp = (
+            "### 推送测试\n\n"
+            f"- **接收人**：{cfg['name'] or '未命名'}\n"
+            "- **说明**：收到这条说明告警推送配置正确。\n"
+        )
+        return notify.ServerChanChannel(sendkey).send(title, desp)
+
+    @app.post("/api/notify/reset")
+    def notify_reset() -> dict[str, Any]:
+        return {"ok": True, "cleared": db.clear_notifications()}
 
     @app.get("/api/settings")
     def settings() -> dict[str, Any]:
