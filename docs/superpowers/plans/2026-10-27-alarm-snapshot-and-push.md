@@ -1321,6 +1321,61 @@ git commit -m "feat(alarm): worker 留存告警画面并接入推送线程 - 蔡
 
 ---
 
+#### Step 2b: 补充要求（Task 5 审查后追加，必须一并完成）
+
+**要求 A：没有画面帧的告警，推送里不能带坏图。**
+`notify.render_message` 当前只要 `base_url` 非空就无条件拼图片链接，而未留存画面的告警会得到一个 404 图片。把 `backend/app/notify.py` 的 `render_message` 分支改为按"有无画面"区分：
+
+```python
+    frame_available = bool(alarm.get("snapshot_first"))
+    if base_url and frame_available:
+        frame_url = f"{base_url}/api/alarms/{alarm.get('id')}/frame?variant=first"
+        lines.append(f"![告警画面]({frame_url})")
+        lines.append("")
+        lines.append(f"> 打开系统查看：[{base_url}]({base_url}/#/alarms)")
+    elif base_url:
+        lines.append(f"> 本条告警未留存画面；打开系统查看：[{base_url}]({base_url}/#/alarms)")
+    else:
+        lines.append("> 未获取到局域网地址，画面请在系统内查看。")
+```
+
+并在 `backend/tests/test_notify.py` 追加一个测试：
+
+```python
+def test_render_message_omits_image_without_snapshot() -> None:
+    title, desp = render_message(_alarm(), base_url="http://192.168.1.5:8000")
+    assert "/api/alarms/12/frame" not in desp
+    assert "未留存画面" in desp
+```
+
+**要求 B：留存失败不能打死检测线程。**
+`alarm_store.persist_alarm` 里的文件写入失败会抛 `OSError`，而 `DetectionWorker.run` 没有兜底，一次磁盘异常会让该路视频源永久失联。把 `backend/app/worker.py` 的告警段落包成：
+
+```python
+                if alarm is not None:
+                    try:
+                        record = alarm_store.persist_alarm(
+                            camera_id=self.camera_id,
+                            camera_name=self.camera["name"],
+                            alarm=alarm,
+                            visible=visible,
+                            frame_jpeg=self.latest_jpeg or b"",
+                            frame_size=(frame.shape[1], frame.shape[0]),
+                            notifier=self.notifier,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        record = None
+                        self._send({"event": "alarm_error", "camera_id": self.camera_id, "message": str(exc)[:200]})
+                    if record is not None:
+                        record["agents"] = trace
+                        self._send({"event": "alarm", "alarm": record})
+```
+
+`alarm_error` 是新增事件，前端 `useRealtime` 不认识的 event 会被忽略，无需改前端。
+
+完成后跑 `ai\.venv\Scripts\python.exe -m pytest backend/tests -q`，预期在 Task 6 基础上再多 1 个测试。
+
+---
 ### Task 7: 通知配置接口
 
 **Files:**
