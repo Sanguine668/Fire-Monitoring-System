@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 from contextlib import asynccontextmanager
@@ -9,10 +10,11 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import db
+from . import snapshots
 from .config import MODEL_PATH, UPLOADS
 from .detector import YoloDetector
 from .events import WsManager
@@ -267,7 +269,35 @@ def create_app() -> FastAPI:
 
     @app.delete("/api/alarms")
     def clear_alarms() -> dict[str, Any]:
-        return {"ok": True, "deleted": db.clear_alarms()}
+        deleted = db.clear_alarms()
+        for item in deleted:
+            snapshots.delete_alarm_frames(int(item["camera_id"]), int(item["id"]))
+        return {"ok": True, "deleted": len(deleted)}
+
+    @app.get("/api/alarms/{alarm_id}")
+    def alarm_detail(alarm_id: int) -> dict[str, Any]:
+        row = db.get_alarm(alarm_id)
+        if not row:
+            raise HTTPException(404, "alarm not found")
+        raw = row.get("boxes") or ""
+        try:
+            row["boxes"] = json.loads(raw) if raw else []
+        except ValueError:
+            row["boxes"] = []
+        return row
+
+    @app.get("/api/alarms/{alarm_id}/frame")
+    def alarm_frame(alarm_id: int, variant: str = "first"):
+        """返回告警对应的画面帧；variant=first 是触发瞬间，latest 是最近一次。"""
+        if variant not in snapshots.VARIANTS:
+            raise HTTPException(400, "variant must be first or latest")
+        row = db.get_alarm(alarm_id)
+        if not row:
+            raise HTTPException(404, "alarm not found")
+        path = snapshots.resolve_frame(row.get(f"snapshot_{variant}") or "")
+        if path is None:
+            raise HTTPException(404, "frame not found")
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/model")
     def model_info(reg: CameraRegistry = Depends(registry)) -> dict[str, Any]:
