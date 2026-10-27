@@ -1458,8 +1458,9 @@ def test_notify_test_without_key_returns_error() -> None:
 
 def test_notify_reset_clears_records() -> None:
     _reset()
-    db.reserve_notification(2, 20, "fire", "标题")
     with TestClient(app) as client:
+        # lifespan 启动时会清空推送记录（每次启动视为新一轮），故占位必须在启动之后
+        db.reserve_notification(2, 20, "fire", "标题")
         assert len(client.get("/api/notify").json()["records"]) == 1
         assert client.post("/api/notify/reset").json()["cleared"] == 1
         assert client.get("/api/notify").json()["records"] == []
