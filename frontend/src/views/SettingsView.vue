@@ -23,6 +23,9 @@ const notify = ref({ enabled: 0, sendkey_masked: '', name: '', daily_limit: 5, c
 const notifyForm = ref({ enabled: 0, sendkey: '', name: '', daily_limit: 5 })
 const notifySaving = ref(false)
 const testing = ref(false)
+// 推送配置是否成功读取：读不到时禁用保存/测试，避免用默认值覆盖已保存的配置
+const notifyLoaded = ref(false)
+const notifyError = ref('')
 
 const thresholdFields = [
   { key: 'fire_threshold', label: '明火置信度阈值', min: 0.05, max: 0.99, step: 0.01 },
@@ -77,12 +80,17 @@ async function loadNotify() {
       name: data.name,
       daily_limit: data.daily_limit
     }
+    notifyLoaded.value = true
+    notifyError.value = ''
   } catch (error) {
+    notifyLoaded.value = false
+    notifyError.value = error.message
     ElMessage.error(`读取推送配置失败：${error.message}`)
   }
 }
 
 async function saveNotify() {
+  if (!notifyLoaded.value) return
   notifySaving.value = true
   try {
     const data = await api.saveNotify(notifyForm.value)
@@ -102,6 +110,7 @@ async function saveNotify() {
 }
 
 async function testNotify() {
+  if (!notifyLoaded.value) return
   testing.value = true
   try {
     const result = await api.testNotify({})
@@ -116,6 +125,7 @@ async function testNotify() {
 }
 
 async function resetNotify() {
+  if (!notifyLoaded.value) return
   try {
     await ElMessageBox.confirm('重置后，各视频源在本次运行中可再次收到推送。确定重置？', '重置推送记录', { type: 'warning' })
     const result = await api.resetNotify()
@@ -197,6 +207,16 @@ onMounted(() => {
       class="tips"
       title="采用 Server酱 推送到微信：免费版每天 5 条，按视频源去重（同一路本次运行只推第一条）。修改配置后需点保存生效。"
     />
+    <el-alert
+      v-if="!notifyLoaded"
+      type="error"
+      :closable="false"
+      :title="`推送配置未读取成功：${notifyError}`"
+      class="tips"
+    >
+      <span class="switch-hint is-wide">当前显示的是默认值；读取成功前保存与测试已禁用，以免覆盖已保存的推送配置。</span>
+      <el-button size="small" text type="primary" @click="loadNotify">重新读取</el-button>
+    </el-alert>
     <el-form label-width="180px" style="max-width: 760px">
       <el-form-item label="启用推送">
         <el-switch v-model="notifyForm.enabled" :active-value="1" :inactive-value="0" />
@@ -216,9 +236,9 @@ onMounted(() => {
         <span class="switch-hint">今日已发送 {{ notify.sent_today }} 条</span>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" :loading="notifySaving" @click="saveNotify">保存推送配置</el-button>
-        <el-button :loading="testing" @click="testNotify">发送测试通知</el-button>
-        <el-button @click="resetNotify">重置推送记录</el-button>
+        <el-button type="primary" :loading="notifySaving" :disabled="!notifyLoaded" @click="saveNotify">保存推送配置</el-button>
+        <el-button :loading="testing" :disabled="!notifyLoaded" @click="testNotify">发送测试通知</el-button>
+        <el-button :disabled="!notifyLoaded" @click="resetNotify">重置推送记录</el-button>
       </el-form-item>
       <el-form-item v-if="notify.last_skip" label="最近一次跳过原因">
         <span class="switch-hint is-wide">{{ notify.last_skip }}</span>
