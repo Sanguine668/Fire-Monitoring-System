@@ -1251,6 +1251,7 @@ from .config import MODEL_PATH, PUBLIC_BASE, UPLOADS
         if not MODEL_PATH.is_file():
             raise RuntimeError(f"模型不存在: {MODEL_PATH}，请先完成 AI 训练")
         snapshots.cleanup_old_frames(days=7)
+        db.clear_notifications()  # 每次启动视为新一轮，各路视频源恢复可推
         notifier = notify.Notifier(base_url_provider=_public_base_url)
         notifier.start()
         registry = CameraRegistry()
