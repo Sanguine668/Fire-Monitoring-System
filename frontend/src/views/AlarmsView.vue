@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check, Delete, Download, Refresh, Search } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import { api } from '../api'
+import { alarmFrameUrl, api } from '../api'
 import { chartFont } from '../utils/chartFont'
 import { useRealtime } from '../composables/useRealtime'
 
@@ -19,6 +19,9 @@ const PAGE_SIZE = 8
 const detail = ref(null)
 const detailVisible = ref(false)
 const busyKey = ref('')
+const frameVariant = ref('first')
+const frameError = ref(false)
+const detailBoxes = ref([])
 
 let typeChart = null
 let trendChart = null
@@ -38,7 +41,13 @@ const filteredRows = computed(() => {
  */
 const displayRows = computed(() => {
   if (statusTab.value !== 'unhandled') {
-    return filteredRows.value.map((row) => ({ ...row, count: 1, firstAt: row.created_at, latestAt: row.created_at }))
+    return filteredRows.value.map((row) => ({
+      ...row,
+      count: 1,
+      firstAt: row.created_at,
+      latestAt: row.created_at,
+      firstSnapshotId: row.snapshot_first ? row.id : null
+    }))
   }
   const groups = new Map()
   for (const row of filteredRows.value) {
@@ -51,7 +60,8 @@ const displayRows = computed(() => {
         firstAt: row.created_at,
         latestAt: row.created_at,
         maxConfidence: row.confidence,
-        verified: Boolean(row.verified)
+        verified: Boolean(row.verified),
+        firstSnapshotId: row.snapshot_first ? row.id : null
       })
       continue
     }
@@ -62,6 +72,7 @@ const displayRows = computed(() => {
       exist.id = row.id
       exist.confidence = row.confidence
       exist.camera_name = row.camera_name
+      exist.snapshot_latest = row.snapshot_latest
     }
     if ((row.created_at || '') < (exist.firstAt || '')) exist.firstAt = row.created_at
     exist.maxConfidence = Math.max(exist.maxConfidence || 0, row.confidence || 0)
@@ -179,9 +190,33 @@ async function ackGroup(level) {
   }
 }
 
-function openDetail(row) {
+async function openDetail(row) {
   detail.value = row
+  detailBoxes.value = []
+  frameVariant.value = 'first'
+  frameError.value = false
   detailVisible.value = true
+  try {
+    const data = await api.alarmDetail(row.id)
+    detailBoxes.value = Array.isArray(data.boxes) ? data.boxes : []
+  } catch {
+    detailBoxes.value = []
+  }
+}
+
+const firstFrameId = computed(() => detail.value?.firstSnapshotId || null)
+const latestFrameId = computed(() => detail.value?.id || null)
+const currentFrameId = computed(() =>
+  frameVariant.value === 'first' ? firstFrameId.value : latestFrameId.value
+)
+const frameUrl = computed(() =>
+  currentFrameId.value && !frameError.value ? alarmFrameUrl(currentFrameId.value, frameVariant.value) : ''
+)
+const hasAnyFrame = computed(() => Boolean(firstFrameId.value || detail.value?.snapshot_latest))
+
+function switchVariant(value) {
+  frameVariant.value = value
+  frameError.value = false
 }
 
 function exportCsv() {
@@ -309,7 +344,7 @@ onUnmounted(() => {
     </el-row>
 
     <el-row :gutter="16">
-      <el-col :span="16">
+      <el-col :span="17">
         <el-card shadow="never">
           <template #header>
             <div class="head">
@@ -348,20 +383,33 @@ onUnmounted(() => {
                 <el-table-column label="最近出现" width="170">
                   <template #default="{ row }">{{ row.latestAt || row.created_at }}</template>
                 </el-table-column>
-                <el-table-column prop="camera_name" label="视频源" min-width="190" show-overflow-tooltip />
-                <el-table-column label="累计次数" width="100">
+                <el-table-column label="画面" width="96">
+                  <template #default="{ row }">
+                    <el-image
+                      v-if="row.snapshot_latest"
+                      :src="alarmFrameUrl(row.id, 'latest')"
+                      fit="cover"
+                      class="thumb"
+                      :preview-src-list="[alarmFrameUrl(row.id, 'latest')]"
+                      preview-teleported
+                    />
+                    <span v-else class="muted">—</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="camera_name" label="视频源" min-width="156" show-overflow-tooltip />
+                <el-table-column label="累计次数" width="92">
                   <template #default="{ row }">
                     <el-tag v-if="row.count > 1" type="danger" size="small" effect="plain">{{ row.count }} 次</el-tag>
                     <span v-else>1 次</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="智能体" width="92">
+                <el-table-column label="智能体" width="84">
                   <template #default="{ row }">
                     <el-tag v-if="row.verified" type="success" size="small" effect="plain">已复核</el-tag>
                     <span v-else class="muted">—</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="最高置信度" width="155">
+                <el-table-column label="最高置信度" width="140">
                   <template #default="{ row }">
                     <el-progress :percentage="Math.round((row.maxConfidence || row.confidence || 0) * 100)" :stroke-width="8" color="#e5484d" />
                   </template>
@@ -415,20 +463,33 @@ onUnmounted(() => {
                 <el-table-column label="最近出现" width="170">
                   <template #default="{ row }">{{ row.latestAt || row.created_at }}</template>
                 </el-table-column>
-                <el-table-column prop="camera_name" label="视频源" min-width="190" show-overflow-tooltip />
-                <el-table-column label="累计次数" width="100">
+                <el-table-column label="画面" width="96">
+                  <template #default="{ row }">
+                    <el-image
+                      v-if="row.snapshot_latest"
+                      :src="alarmFrameUrl(row.id, 'latest')"
+                      fit="cover"
+                      class="thumb"
+                      :preview-src-list="[alarmFrameUrl(row.id, 'latest')]"
+                      preview-teleported
+                    />
+                    <span v-else class="muted">—</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="camera_name" label="视频源" min-width="156" show-overflow-tooltip />
+                <el-table-column label="累计次数" width="92">
                   <template #default="{ row }">
                     <el-tag v-if="row.count > 1" type="warning" size="small" effect="plain">{{ row.count }} 次</el-tag>
                     <span v-else>1 次</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="智能体" width="92">
+                <el-table-column label="智能体" width="84">
                   <template #default="{ row }">
                     <el-tag v-if="row.verified" type="success" size="small" effect="plain">已复核</el-tag>
                     <span v-else class="muted">—</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="最高置信度" width="155">
+                <el-table-column label="最高置信度" width="140">
                   <template #default="{ row }">
                     <el-progress :percentage="Math.round((row.maxConfidence || row.confidence || 0) * 100)" :stroke-width="8" color="#e6a23c" />
                   </template>
@@ -463,7 +524,7 @@ onUnmounted(() => {
         </el-card>
       </el-col>
 
-      <el-col :span="8">
+      <el-col :span="7">
         <el-card shadow="never" class="chart-card">
           <template #header>告警类型分布</template>
           <div id="alarmTypeChart" style="height: 220px" />
@@ -475,7 +536,30 @@ onUnmounted(() => {
       </el-col>
     </el-row>
 
-    <el-drawer v-model="detailVisible" title="告警详情" size="420px">
+    <el-drawer v-model="detailVisible" title="告警详情" size="560px">
+      <div v-if="detail" class="frame-panel">
+        <div class="frame-head">
+          <el-radio-group :model-value="frameVariant" size="small" @update:model-value="switchVariant">
+            <el-radio-button value="first" :disabled="!firstFrameId">触发帧</el-radio-button>
+            <el-radio-button value="latest" :disabled="!latestFrameId">最近帧</el-radio-button>
+          </el-radio-group>
+          <span class="frame-time">{{ detail.latestAt || detail.created_at }}</span>
+        </div>
+        <img v-if="frameUrl" :src="frameUrl" class="frame-img" alt="告警画面" @error="frameError = true" />
+        <div v-else class="frame-empty">
+          {{ hasAnyFrame ? '画面读取失败（文件可能已被清理）' : '该告警产生于功能上线前，无画面留存' }}
+        </div>
+        <div v-if="detailBoxes.length" class="box-list">
+          <div class="box-title">检测结果（{{ detailBoxes.length }}）</div>
+          <div v-for="(item, index) in detailBoxes" :key="index" class="box-row">
+            <el-tag :type="item.type === 'fire' ? 'danger' : 'warning'" size="small" effect="plain">
+              {{ item.type === 'fire' ? '明火' : '烟雾' }}
+            </el-tag>
+            <span class="box-conf">{{ (item.confidence * 100).toFixed(1) }}%</span>
+            <span class="box-coord">框 x{{ item.bbox[0] }} y{{ item.bbox[1] }} w{{ item.bbox[2] }} h{{ item.bbox[3] }}</span>
+          </div>
+        </div>
+      </div>
       <el-descriptions v-if="detail" :column="1" border>
         <el-descriptions-item label="视频源">{{ detail.camera_name }}</el-descriptions-item>
         <el-descriptions-item label="告警类型">{{ detail.alarm_type === 'fire' ? '明火' : '烟雾' }}</el-descriptions-item>
@@ -519,4 +603,18 @@ onUnmounted(() => {
 .dot.warning { background: #e6a23c; }
 .pager { display: flex; justify-content: flex-end; margin-top: 8px; }
 .chart-card { margin-bottom: 16px; }
+.thumb { width: 3.5rem; height: 2.25rem; border-radius: 4px; cursor: zoom-in; }
+.frame-panel { margin-bottom: 1rem; }
+.frame-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.frame-time { color: #9aa2b0; font-size: 0.875rem; }
+.frame-img { width: 100%; border-radius: 6px; background: #0f141c; display: block; }
+.frame-empty {
+  height: 8rem; display: flex; align-items: center; justify-content: center;
+  background: #f3f5f8; color: #9aa2b0; border-radius: 6px; font-size: 0.875rem; text-align: center; padding: 0 1rem;
+}
+.box-list { margin-top: 0.75rem; }
+.box-title { font-size: 0.875rem; color: #4b5563; margin-bottom: 0.375rem; }
+.box-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; font-size: 0.875rem; }
+.box-conf { color: #1f2d3d; font-weight: 600; }
+.box-coord { color: #9aa2b0; }
 </style>

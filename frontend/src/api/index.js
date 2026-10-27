@@ -45,6 +45,7 @@ export const api = {
   },
   alarms: (limit = 200) => request(`/api/alarms?limit=${limit}`),
   clearAlarms: () => request('/api/alarms', { method: 'DELETE' }),
+  alarmDetail: (id) => request(`/api/alarms/${id}`),
   modelInfo: () => request('/api/model'),
   agents: () => request('/api/agents'),
   ackAlarm: (id) => request(`/api/alarms/${id}/ack`, { method: 'POST' }),
@@ -56,3 +57,4 @@ export const api = {
 
 export const streamUrl = (cameraId, annotated = true) => `/stream/${cameraId}${annotated ? '' : '?annotated=false'}`
 export const snapshotUrl = (cameraId, annotated = true) => `/snapshot/${cameraId}?annotated=${annotated ? 'true' : 'false'}`
+export const alarmFrameUrl = (alarmId, variant = 'first') => `/api/alarms/${alarmId}/frame?variant=${variant}`
