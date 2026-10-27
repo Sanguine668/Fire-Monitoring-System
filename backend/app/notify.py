@@ -62,22 +62,26 @@ class ServerChanChannel:
         self.sendkey = sendkey
 
     def send(self, title: str, desp: str) -> dict[str, Any]:
-        url = SERVERCHAN_URL.format(key=self.sendkey)
+        """任何异常都转成结果字典，绝不让 /api/notify/test 或推送线程 500。"""
         try:
+            url = SERVERCHAN_URL.format(key=self.sendkey)
             resp = httpx.post(url, data={"title": title, "desp": desp}, timeout=SEND_TIMEOUT)
+            if resp.status_code == 429:
+                return {"ok": False, "code": 429, "message": "调用过于频繁，已被限流（429）"}
+            if resp.status_code != 200:
+                return {"ok": False, "code": resp.status_code, "message": f"HTTP {resp.status_code}"}
+            try:
+                payload = resp.json()
+            except ValueError:
+                return {"ok": False, "code": None, "message": "返回内容不是 JSON"}
+            code = int(payload.get("code", -1))
+            message = str(payload.get("message") or (payload.get("data") or {}).get("error") or "")
+            return {"ok": code == 0, "code": code, "message": message}
         except httpx.HTTPError as exc:
             return {"ok": False, "code": None, "message": f"网络错误：{exc}"}
-        if resp.status_code == 429:
-            return {"ok": False, "code": 429, "message": "调用过于频繁，已被限流（429）"}
-        if resp.status_code != 200:
-            return {"ok": False, "code": resp.status_code, "message": f"HTTP {resp.status_code}"}
-        try:
-            payload = resp.json()
-        except ValueError:
-            return {"ok": False, "code": None, "message": "返回内容不是 JSON"}
-        code = int(payload.get("code", -1))
-        message = str(payload.get("message") or (payload.get("data") or {}).get("error") or "")
-        return {"ok": code == 0, "code": code, "message": message}
+        except Exception as exc:  # noqa: BLE001
+            # InvalidURL（SendKey 含控制字符）、JSON 结构异常等都落到这里
+            return {"ok": False, "code": None, "message": f"发送异常：{exc}"}
 
 
 class Notifier(threading.Thread):
@@ -118,10 +122,20 @@ class Notifier(threading.Thread):
         ):
             self.last_skip = "该视频源本轮已推送过"
             return False
-        result = self._channel_factory(cfg["sendkey"]).send(title, desp)
-        db.finish_notification(
-            int(alarm["camera_id"]), bool(result["ok"]), result.get("code"), result.get("message", "")
-        )
+        db.bump_notify_daily()  # 占位成功后即计一次尝试：发送失败也算用掉额度
+        try:
+            result = self._channel_factory(cfg["sendkey"]).send(title, desp)
+            db.finish_notification(
+                int(alarm["camera_id"]), bool(result["ok"]), result.get("code"), result.get("message", "")
+            )
+        except Exception as exc:  # noqa: BLE001
+            message = f"推送异常：{exc}"
+            try:
+                db.finish_notification(int(alarm["camera_id"]), False, None, message)
+            except Exception:  # noqa: BLE001
+                pass  # 记录失败也不能让异常冒到 run()，否则连 last_skip 都留不下
+            self.last_skip = message
+            return False
         self.last_skip = "" if result["ok"] else f"发送失败：{result.get('message', '')}"
         return bool(result["ok"])
 

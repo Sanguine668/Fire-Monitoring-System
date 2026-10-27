@@ -193,7 +193,8 @@ async function ackGroup(level) {
 async function openDetail(row) {
   detail.value = row
   detailBoxes.value = []
-  frameVariant.value = 'first'
+  // 默认落在真的有画面的那一路，避免一打开就是"读取失败"
+  frameVariant.value = row.firstSnapshotId ? 'first' : 'latest'
   frameError.value = false
   detailVisible.value = true
   try {
@@ -205,7 +206,7 @@ async function openDetail(row) {
 }
 
 const firstFrameId = computed(() => detail.value?.firstSnapshotId || null)
-const latestFrameId = computed(() => detail.value?.id || null)
+const latestFrameId = computed(() => (detail.value?.snapshot_latest ? detail.value.id : null))
 const currentFrameId = computed(() =>
   frameVariant.value === 'first' ? firstFrameId.value : latestFrameId.value
 )
@@ -213,6 +214,15 @@ const frameUrl = computed(() =>
   currentFrameId.value && !frameError.value ? alarmFrameUrl(currentFrameId.value, frameVariant.value) : ''
 )
 const hasAnyFrame = computed(() => Boolean(firstFrameId.value || detail.value?.snapshot_latest))
+const otherFrameExists = computed(() =>
+  frameVariant.value === 'first' ? Boolean(detail.value?.snapshot_latest) : Boolean(firstFrameId.value)
+)
+const frameEmptyText = computed(() => {
+  if (!currentFrameId.value && otherFrameExists.value) {
+    return frameVariant.value === 'first' ? '该告警只有最近帧，触发帧未留存' : '该告警只有触发帧，最近帧未留存'
+  }
+  return hasAnyFrame.value ? '画面读取失败（文件可能已被清理）' : '该告警产生于功能上线前，无画面留存'
+})
 
 function switchVariant(value) {
   frameVariant.value = value
@@ -547,7 +557,7 @@ onUnmounted(() => {
         </div>
         <img v-if="frameUrl" :src="frameUrl" class="frame-img" alt="告警画面" @error="frameError = true" />
         <div v-else class="frame-empty">
-          {{ hasAnyFrame ? '画面读取失败（文件可能已被清理）' : '该告警产生于功能上线前，无画面留存' }}
+          {{ frameEmptyText }}
         </div>
         <div v-if="detailBoxes.length" class="box-list">
           <div class="box-title">检测结果（{{ detailBoxes.length }}）</div>
@@ -603,7 +613,7 @@ onUnmounted(() => {
 .dot.warning { background: #e6a23c; }
 .pager { display: flex; justify-content: flex-end; margin-top: 8px; }
 .chart-card { margin-bottom: 16px; }
-.thumb { width: 3.5rem; height: 2.25rem; border-radius: 4px; cursor: zoom-in; }
+.thumb { width: 3.5rem; max-width: 100%; height: auto; border-radius: 4px; cursor: zoom-in; }
 .frame-panel { margin-bottom: 1rem; }
 .frame-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
 .frame-time { color: #9aa2b0; font-size: 0.875rem; }

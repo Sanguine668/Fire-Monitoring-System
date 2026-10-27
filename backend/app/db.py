@@ -78,6 +78,10 @@ def init_db() -> None:
                 handled_count INTEGER NOT NULL DEFAULT 0,
                 total_count INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS notify_daily (
+                day TEXT PRIMARY KEY,
+                count INTEGER NOT NULL DEFAULT 0
+            );
             CREATE TABLE IF NOT EXISTS alarm_notifications (
                 camera_id INTEGER PRIMARY KEY,
                 alarm_id INTEGER NOT NULL,
@@ -298,12 +302,23 @@ def clear_notifications() -> int:
         return c.execute("DELETE FROM alarm_notifications").rowcount
 
 
-def notifications_sent_today() -> int:
+def bump_notify_daily() -> None:
+    """每尝试推送一次就 +1；写在独立表里，重启清空 alarm_notifications 也不会归零。"""
     with _conn() as c:
-        return c.execute(
-            "SELECT COUNT(*) n FROM alarm_notifications WHERE created_at LIKE ?",
-            (now_text()[:10] + "%",),
-        ).fetchone()["n"]
+        c.execute(
+            """
+            INSERT INTO notify_daily(day, count) VALUES(?, 1)
+            ON CONFLICT(day) DO UPDATE SET count=count+1
+            """,
+            (now_text()[:10],),
+        )
+
+
+def notifications_sent_today() -> int:
+    """今天已尝试推送的条数；读持久计数，重启不清零。"""
+    with _conn() as c:
+        row = c.execute("SELECT count FROM notify_daily WHERE day=?", (now_text()[:10],)).fetchone()
+    return int(row["count"]) if row else 0
 
 
 def get_notify_config() -> dict[str, Any]:

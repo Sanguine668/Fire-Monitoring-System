@@ -66,3 +66,35 @@ def test_empty_frame_still_records_alarm() -> None:
     record = alarm_store.persist_alarm(7, "南门", {"alarm_type": "fire", "level": "critical", "confidence": 0.7}, [], b"", (0, 0))
     assert record["id"] > 0
     assert not record.get("snapshot_first")
+
+
+def test_frame_write_failure_keeps_alarm_and_push(monkeypatch) -> None:
+    """画面落盘失败不能丢告警：记录照常返回、推送照常发出、库里不写半截画面字段。"""
+    _prepare()
+
+    def boom(*args, **kwargs):
+        raise OSError("磁盘已满")
+
+    monkeypatch.setattr(alarm_store.snapshots, "store_frame", boom)
+    notifier = FakeNotifier()
+    record = alarm_store.persist_alarm(
+        camera_id=9,
+        camera_name="东门",
+        alarm={"alarm_type": "fire", "level": "critical", "confidence": 0.8},
+        visible=[{"type": "fire", "confidence": 0.8, "bbox": [1, 2, 3, 4]}],
+        frame_jpeg=b"\xff\xd8bad\xff\xd9",
+        frame_size=(640, 480),
+        notifier=notifier,
+    )
+    assert record is not None
+    assert record["id"] > 0
+    assert record["is_new"] is True
+    assert record["pushed"] is True
+    assert len(notifier.received) == 1
+    assert notifier.received[0]["id"] == record["id"]
+    row = db.get_alarm(record["id"])
+    assert row is not None
+    assert row["snapshot_first"] is None
+    assert row["snapshot_latest"] is None
+    assert row["boxes"] is None
+    assert row["frame_size"] is None

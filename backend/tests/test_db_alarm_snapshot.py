@@ -44,14 +44,20 @@ def test_clear_alarms_returns_deleted_ids() -> None:
 def test_notification_reserve_is_per_camera() -> None:
     db.init_db()
     db.clear_notifications()
+    with db._conn() as c:  # 每日尝试计数独立于占位表，先清零再断言
+        c.execute("DELETE FROM notify_daily")
     assert db.reserve_notification(5, 100, "fire", "标题A") is True
     assert db.reserve_notification(5, 101, "smoke", "标题B") is False
     assert db.reserve_notification(6, 102, "fire", "标题C") is True
     db.finish_notification(5, True, 0, "ok")
     records = {r["camera_id"]: r for r in db.list_notifications()}
     assert records[5]["ok"] == 1
+    assert db.notifications_sent_today() == 0  # 占位不等于已发送，额度由 Notifier.handle 计
+    db.bump_notify_daily()
+    db.bump_notify_daily()
     assert db.notifications_sent_today() == 2
     assert db.clear_notifications() == 2
+    assert db.notifications_sent_today() == 2  # 清占位表不影响每日计数
     assert db.reserve_notification(5, 103, "fire", "标题D") is True
 
 

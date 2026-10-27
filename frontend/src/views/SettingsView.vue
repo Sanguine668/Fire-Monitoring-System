@@ -208,7 +208,7 @@ onMounted(() => {
       title="采用 Server酱 推送到微信：免费版每天 5 条，按视频源去重（同一路本次运行只推第一条）。修改配置后需点保存生效。"
     />
     <el-alert
-      v-if="!notifyLoaded"
+      v-if="notifyError"
       type="error"
       :closable="false"
       :title="`推送配置未读取成功：${notifyError}`"
