@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 STORAGE = ROOT / "storage"
 UPLOADS = STORAGE / "uploads"
-SNAPSHOTS = STORAGE / "snapshots"
+SNAPSHOTS = Path(os.environ.get("FIREGUARD_SNAPSHOTS", str(STORAGE / "snapshots")))
 FRONTEND_DIST = ROOT / "frontend" / "dist"
 
 DB_PATH = Path(os.environ.get("FIREGUARD_DB", str(STORAGE / "fireguard.db")))
