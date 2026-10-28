@@ -13,6 +13,7 @@ const previewCamera = ref(null)
 const previewAnnotated = ref(true)
 const keyword = ref('')
 const busyId = ref(null)
+const alertsBusyId = ref(null)
 const form = reactive({ name: '', location: '', source_type: 'http', source: '', loop: true })
 
 const filteredCameras = computed(() => {
@@ -77,6 +78,24 @@ async function toggle(camera) {
   }
 }
 
+async function toggleAlerts(camera) {
+  if (alertsBusyId.value !== null) return
+  alertsBusyId.value = camera.id
+  try {
+    const result = await api.toggleCameraAlerts(camera.id)
+    ElMessage.success(
+      result.alerts_enabled
+        ? `已开启「${camera.name}」的全屏告警`
+        : `已关闭「${camera.name}」的全屏告警`
+    )
+    await load()
+  } catch (error) {
+    ElMessage.error(`操作失败：${error.message}`)
+  } finally {
+    alertsBusyId.value = null
+  }
+}
+
 async function remove(camera) {
   busyId.value = camera.id
   try {
@@ -112,7 +131,7 @@ onMounted(load)
     <el-empty v-if="filteredCameras.length === 0" :description="cameras.length === 0 ? '暂无视频源' : '没有匹配的视频源'" />
     <el-table v-else :data="filteredCameras" stripe>
       <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column prop="name" label="名称" width="235" />
+      <el-table-column prop="name" label="名称" width="200" show-overflow-tooltip />
       <el-table-column prop="location" label="位置" width="160" />
       <el-table-column label="类型" width="90">
         <template #default="{ row }">
@@ -130,6 +149,15 @@ onMounted(load)
           <el-tag :type="row.enabled ? 'success' : 'warning'" size="small" effect="plain">
             {{ row.enabled ? '已启用' : '已停用' }}
           </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="全屏告警" width="110" align="center">
+        <template #default="{ row }">
+          <el-switch
+            :model-value="row.alerts_enabled === 1"
+            :loading="alertsBusyId === row.id"
+            @change="toggleAlerts(row)"
+          />
         </template>
       </el-table-column>
       <el-table-column label="操作" width="240">

@@ -52,6 +52,7 @@ def init_db() -> None:
                 loop INTEGER NOT NULL DEFAULT 1,
                 online INTEGER NOT NULL DEFAULT 0,
                 enabled INTEGER NOT NULL DEFAULT 1,
+                alerts_enabled INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS alarms (
@@ -130,6 +131,9 @@ def init_db() -> None:
         ):
             if column not in columns:
                 c.execute(f"ALTER TABLE alarms ADD COLUMN {column} {decl}")
+        camera_columns = {r["name"] for r in c.execute("PRAGMA table_info(cameras)").fetchall()}
+        if "alerts_enabled" not in camera_columns:
+            c.execute("ALTER TABLE cameras ADD COLUMN alerts_enabled INTEGER NOT NULL DEFAULT 1")
 
 
 def insert_camera(name: str, source_type: str, source: str, location: str = "", loop: int = 1) -> int:
@@ -156,6 +160,11 @@ def get_camera(camera_id: int) -> dict[str, Any] | None:
 def set_camera_enabled(camera_id: int, enabled: bool) -> None:
     with _conn() as c:
         c.execute("UPDATE cameras SET enabled=? WHERE id=?", (1 if enabled else 0, camera_id))
+
+
+def set_camera_alerts(camera_id: int, enabled: bool) -> None:
+    with _conn() as c:
+        c.execute("UPDATE cameras SET alerts_enabled=? WHERE id=?", (1 if enabled else 0, camera_id))
 
 
 def set_camera_online(camera_id: int, online: bool) -> None:

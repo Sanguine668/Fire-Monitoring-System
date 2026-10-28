@@ -33,43 +33,122 @@ let previousOverflow = ''
 /* ── 警报音（Web Audio，无音频文件） ─────────────────────────── */
 
 let audioContext = null
+let toneTimer = null
+const toneVoices = new Set()
 
 const ALARM_TONES = {
-  // 明火：880Hz 三短声，急促
-  fire: { frequency: 880, beeps: 3, duration: 0.13, gap: 0.09, type: 'square', gain: 0.16 },
-  // 烟雾：520Hz 两声，间隔更长
-  smoke: { frequency: 520, beeps: 2, duration: 0.38, gap: 0.34, type: 'triangle', gain: 0.24 }
+  // 明火：880Hz 三短声，急促；每 1.5s 循环
+  fire: { frequency: 880, beeps: 3, duration: 0.13, gap: 0.09, type: 'square', gain: 0.3, interval: 1500 },
+  // 烟雾：660Hz 两声，更低沉但更响；每 2.2s 循环
+  smoke: { frequency: 660, beeps: 2, duration: 0.3, gap: 0.22, type: 'square', gain: 0.48, interval: 2200 }
 }
 
-function playAlarmSound(alarmType) {
-  try {
-    const AudioCtor = window.AudioContext || window.webkitAudioContext
-    if (!AudioCtor) return
-    if (!audioContext) audioContext = new AudioCtor()
-    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {})
-    // 浏览器在用户交互前会拦截音频：静默跳过，不抛错也不打日志
-    if (audioContext.state !== 'running') return
+function ensureAudioContext() {
+  const AudioCtor = window.AudioContext || window.webkitAudioContext
+  if (!AudioCtor) return null
+  if (!audioContext) audioContext = new AudioCtor()
+  // 浏览器在用户交互前会拦截音频：尝试恢复，失败也不抛错
+  if (audioContext.state === 'suspended') audioContext.resume().catch(() => {})
+  return audioContext
+}
 
-    const tone = ALARM_TONES[alarmType] || ALARM_TONES.fire
-    const ctx = audioContext
-    const startAt = ctx.currentTime + 0.03
-    for (let i = 0; i < tone.beeps; i += 1) {
-      const at = startAt + i * (tone.duration + tone.gap)
-      const oscillator = ctx.createOscillator()
-      const envelope = ctx.createGain()
-      oscillator.type = tone.type
-      oscillator.frequency.setValueAtTime(tone.frequency, at)
-      envelope.gain.setValueAtTime(0.0001, at)
-      envelope.gain.exponentialRampToValueAtTime(tone.gain, at + 0.015)
-      envelope.gain.setValueAtTime(tone.gain, at + tone.duration - 0.03)
-      envelope.gain.exponentialRampToValueAtTime(0.0001, at + tone.duration)
-      oscillator.connect(envelope).connect(ctx.destination)
-      oscillator.start(at)
-      oscillator.stop(at + tone.duration + 0.02)
+function scheduleToneBurst(tone) {
+  const ctx = audioContext
+  if (!ctx || ctx.state !== 'running') return
+  const startAt = ctx.currentTime + 0.03
+  for (let i = 0; i < tone.beeps; i += 1) {
+    const at = startAt + i * (tone.duration + tone.gap)
+    const oscillator = ctx.createOscillator()
+    const envelope = ctx.createGain()
+    const voice = { oscillator, envelope }
+    oscillator.type = tone.type
+    oscillator.frequency.setValueAtTime(tone.frequency, at)
+    // 短线性斜坡代替硬起停，避免爆音
+    envelope.gain.setValueAtTime(0.0001, at)
+    envelope.gain.linearRampToValueAtTime(tone.gain, at + 0.012)
+    envelope.gain.setValueAtTime(tone.gain, at + Math.max(0.012, tone.duration - 0.03))
+    envelope.gain.linearRampToValueAtTime(0.0001, at + tone.duration)
+    oscillator.connect(envelope).connect(ctx.destination)
+    oscillator.onended = () => {
+      toneVoices.delete(voice)
+      try {
+        oscillator.disconnect()
+        envelope.disconnect()
+      } catch {
+        // 节点已断开时忽略
+      }
     }
+    toneVoices.add(voice)
+    oscillator.start(at)
+    oscillator.stop(at + tone.duration + 0.02)
+  }
+}
+
+/** 关闭弹窗的每一条路径都必须调用：清掉循环定时器，并立刻停掉正在发声的节点。 */
+function stopTone() {
+  if (toneTimer !== null) {
+    clearInterval(toneTimer)
+    toneTimer = null
+  }
+  for (const voice of toneVoices) {
+    try {
+      voice.oscillator.stop()
+    } catch {
+      // 已停止的振荡器忽略
+    }
+    try {
+      voice.oscillator.disconnect()
+      voice.envelope.disconnect()
+    } catch {
+      // 已断开的节点忽略
+    }
+  }
+  toneVoices.clear()
+}
+
+function startTone(alarmType) {
+  stopTone()
+  try {
+    const tone = ALARM_TONES[alarmType] || ALARM_TONES.fire
+    if (!ensureAudioContext()) return
+    scheduleToneBurst(tone)
+    toneTimer = setInterval(() => {
+      try {
+        if (!audioContext || audioContext.state !== 'running') {
+          ensureAudioContext()
+          return
+        }
+        scheduleToneBurst(tone)
+      } catch {
+        stopTone()
+      }
+    }, tone.interval)
   } catch {
     // 无音频设备 / 浏览器策略限制时静默降级
+    stopTone()
   }
+}
+
+/* ── 每个视频源的「全屏告警」开关 ───────────────────────────── */
+
+const cameraAlerts = new Map()
+let cameraPollTimer = null
+
+async function loadCameraAlerts() {
+  try {
+    const cameras = await api.cameras()
+    if (!Array.isArray(cameras)) return
+    cameraAlerts.clear()
+    for (const camera of cameras) {
+      cameraAlerts.set(Number(camera.id), camera.alerts_enabled !== 0)
+    }
+  } catch {
+    // 拉取失败时保留上一次配置；未知视频源默认允许告警，避免漏报
+  }
+}
+
+function alertsAllowed(cameraId) {
+  return cameraAlerts.get(Number(cameraId)) !== false
 }
 
 /* ── 告警识别与去重 ─────────────────────────────────────────── */
@@ -107,6 +186,8 @@ function syncFromAlarms(alarms) {
   for (const alarm of fresh) {
     const key = groupKey(alarm)
     if (notified.has(key)) continue
+    // 该视频源关闭了「全屏告警」：整条跳过，不排队、不记去重标记
+    if (!alertsAllowed(alarm.camera_id)) continue
     notified.add(key)
     queue.value.push(alarm)
   }
@@ -171,12 +252,13 @@ function showNext() {
     snapshotSrc.value = ''
     stopSnapshotPolling()
     lockScroll()
-    playAlarmSound(next.alarm_type)
+    startTone(next.alarm_type)
     return
   }
 }
 
 function finishCurrent() {
+  stopTone()
   stopSnapshotPolling()
   streamBroken.value = false
   snapshotSrc.value = ''
@@ -188,12 +270,15 @@ function finishCurrent() {
 
 function dismiss() {
   if (!current.value || acking.value) return
+  stopTone()
   finishCurrent()
 }
 
 async function confirmHandle() {
   const target = current.value
   if (!target || acking.value) return
+  // 点击「确认处理」立即静音，不等接口返回
+  stopTone()
   acking.value = true
   ackError.value = ''
   try {
@@ -204,6 +289,8 @@ async function confirmHandle() {
   } catch (error) {
     ackError.value = `确认失败：${error.message || error}`
     ElMessage.error(ackError.value)
+    // 确认失败时弹窗仍在，恢复警报音
+    if (current.value === target) startTone(target.alarm_type)
   } finally {
     acking.value = false
   }
@@ -224,10 +311,23 @@ onMounted(() => {
   lastId.value = highestId(realtime.alarms)
   ready.value = true
   window.addEventListener('keydown', onKeydown)
+  loadCameraAlerts()
+  cameraPollTimer = setInterval(loadCameraAlerts, 30000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
+  if (cameraPollTimer) {
+    clearInterval(cameraPollTimer)
+    cameraPollTimer = null
+  }
+  stopTone()
+  try {
+    if (audioContext) audioContext.close().catch(() => {})
+  } catch {
+    // 已关闭的 AudioContext 忽略
+  }
+  audioContext = null
   stopSnapshotPolling()
   unlockScroll()
   ready.value = false

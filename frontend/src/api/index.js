@@ -37,6 +37,7 @@ export const api = {
   cameras: () => request('/api/cameras'),
   addCamera: (payload) => request('/api/cameras', { method: 'POST', body: JSON.stringify(payload) }),
   toggleCamera: (id) => request(`/api/cameras/${id}/toggle`, { method: 'POST' }),
+  toggleCameraAlerts: (id) => request('/api/cameras/' + id + '/alerts', { method: 'POST' }),
   deleteCamera: (id) => request(`/api/cameras/${id}`, { method: 'DELETE' }),
   uploadVideo: (file) => {
     const form = new FormData()
