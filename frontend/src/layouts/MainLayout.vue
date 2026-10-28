@@ -80,9 +80,13 @@ function openAlarms() {
 .brand-mark { width: 36px; height: 36px; line-height: 36px; text-align: center; border-radius: 8px; background: #e5484d; font-weight: 700; }
 .brand small { display: block; color: #aab2c0; font-size: 0.875rem; }
 .menu { border-right: none; }
-.header { display: flex; align-items: center; justify-content: space-between; background: #fff; border-bottom: 1px solid #e5e7eb; }
-.header h2 { margin: 0; }
-.header span { color: #7b8494; font-size: 0.9375rem; }
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  height: auto; min-height: 4.25rem; padding: 0.5rem 1.25rem;
+  background: #fff; border-bottom: 1px solid #e5e7eb;
+}
+.header h2 { margin: 0; font-size: 1.375rem; line-height: 1.3; }
+.header span { color: #7b8494; font-size: 0.8125rem; line-height: 1.4; }
 .clock { color: #4b5563; }
 .status { display: flex; align-items: center; gap: 10px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #c0c4cc; display: inline-block; }
