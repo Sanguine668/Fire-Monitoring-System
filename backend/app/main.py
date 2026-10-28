@@ -14,12 +14,14 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import db
+from . import evidence
 from . import snapshots
 from . import notify
 from .config import MODEL_PATH, PUBLIC_BASE, UPLOADS
 from .detector import YoloDetector
 from .events import WsManager
 from .static import mount_frontend
+from .tiling import tile_frame
 from .worker import DetectionWorker
 
 
@@ -510,6 +512,137 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "frame not ready")
         return Response(
             content=frame,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    EVIDENCE_KINDS = {"detect", "tiles", "verify", "films"}
+
+    @app.get("/api/agents/evidence/meta")
+    def agent_evidence_meta(camera_id: int, reg: CameraRegistry = Depends(registry)) -> dict[str, Any]:
+        """证据抽屉的数值面板：全部读 Worker 现场留档，不触发任何检测。"""
+        worker = reg.workers.get(camera_id)
+        if not worker:
+            raise HTTPException(404, "worker not running")
+        s = worker.settings_provider()
+        engine = getattr(worker, "engine", None)
+        trace = getattr(worker, "_last_trace", None) or {}
+        objects = list(getattr(worker, "_last_objects", []) or [])
+        perception = trace.get("perception") or {}
+        farfield = trace.get("farfield") or {}
+        temporal = trace.get("temporal") or {}
+        decision = trace.get("decision") or {}
+        top = perception.get("top_confidence")
+        if top is None:
+            top = max((float(d.get("confidence", 0.0)) for d in objects), default=0.0)
+        held = farfield.get("held")
+        if held is None:
+            held = len(getattr(worker, "_tile_objects", []) or [])
+        tile_size = int(s.get("tile_size", 640))
+        overlap = float(s.get("tile_overlap", 0.2))
+        raw = evidence.decode_jpeg(getattr(worker, "latest_raw_jpeg", None))
+        tiles = len(tile_frame(raw, tile_size, overlap)) if raw is not None else 0
+        stats = getattr(worker, "_verify_stats", {}) or {}
+        last_verify = getattr(worker, "_last_verify", None)
+        last = None
+        if last_verify is not None:
+            last = {
+                "ts": last_verify.get("ts", ""),
+                "passed": bool(last_verify.get("passed")),
+                "confidence": float(last_verify.get("confidence") or 0.0),
+                "threshold": float(last_verify.get("threshold") or 0.0),
+                "type": last_verify.get("type", ""),
+            }
+        temporal_frames = [
+            {
+                "ts": item.get("ts", ""),
+                "objects": int(item.get("objects", 0)),
+                "smoke": round(float(item.get("smoke") or 0.0), 3),
+            }
+            for item in list(getattr(worker, "_evidence_frames", []) or [])
+        ]
+        return {
+            "camera_id": camera_id,
+            "perception": {
+                "objects": int(perception.get("objects", len(objects))),
+                "top": round(float(top), 3),
+            },
+            "farfield": {
+                "tiles": tiles,
+                "tile_size": tile_size,
+                "overlap": round(overlap, 2),
+                "held": int(held),
+                "active": bool(farfield.get("active", bool(int(s.get("tiling_enabled", 0))))),
+            },
+            "temporal": {
+                "streak": int(temporal.get("smoke_streak", getattr(engine, "smoke_streak", 0))),
+                "required": int(s.get("continuous_frames", temporal.get("required", 3))),
+                "cooldown": int(s.get("alarm_cooldown", temporal.get("cooldown", 8))),
+                "frames": temporal_frames,
+            },
+            "verification": {
+                "total": int(stats.get("total", 0)),
+                "passed": int(stats.get("passed", 0)),
+                "blocked": int(stats.get("blocked", 0)),
+                "last": last,
+            },
+            "decision": {
+                "risk": int(decision.get("risk", getattr(engine, "risk", 0))),
+                "status": decision.get("status", getattr(engine, "status", "normal")),
+                "alarm": bool(decision.get("alarm", False)),
+            },
+        }
+
+    @app.get("/api/agents/evidence")
+    def agent_evidence(
+        camera_id: int,
+        kind: str,
+        reg: CameraRegistry = Depends(registry),
+    ):
+        """按需渲染一张证据图；画面像素全部来自该 Worker 真实采集的帧。"""
+        if kind not in EVIDENCE_KINDS:
+            raise HTTPException(400, "kind must be one of: detect, tiles, verify, films")
+        worker = reg.workers.get(camera_id)
+        if not worker:
+            raise HTTPException(404, "worker not running")
+        if kind == "detect":
+            frame = evidence.decode_jpeg(getattr(worker, "latest_raw_jpeg", None))
+            if frame is None:
+                raise HTTPException(404, "frame not ready")
+            payload = evidence.render_detect(frame, list(getattr(worker, "_last_objects", []) or []))
+        elif kind == "tiles":
+            frame = evidence.decode_jpeg(getattr(worker, "latest_raw_jpeg", None))
+            if frame is None:
+                raise HTTPException(404, "frame not ready")
+            s = worker.settings_provider()
+            tile_size = int(s.get("tile_size", 640))
+            overlap = float(s.get("tile_overlap", 0.2))
+            tiles = tile_frame(frame, tile_size, overlap)
+            payload = evidence.render_tiles(
+                frame,
+                tiles,
+                list(getattr(worker, "_tile_objects", []) or []),
+                tile_size,
+                overlap,
+            )
+        elif kind == "verify":
+            last = getattr(worker, "_last_verify", None)
+            if last is None:
+                raise HTTPException(404, "no verification yet")
+            crop = evidence.decode_jpeg(last.get("crop"))
+            if crop is None:
+                # 触发帧里没定位到目标时没有裁剪图，用当前真实原始帧承载结论，避免伪造
+                crop = evidence.decode_jpeg(getattr(worker, "latest_raw_jpeg", None))
+            if crop is None:
+                raise HTTPException(404, "verification crop not ready")
+            payload = evidence.render_verify(crop, last)
+        else:
+            frames = list(getattr(worker, "_evidence_frames", []) or [])
+            if not frames:
+                raise HTTPException(404, "no evidence frames yet")
+            payload = evidence.render_films(frames)
+        return Response(
+            content=payload,
             media_type="image/jpeg",
             headers={"Cache-Control": "no-store"},
         )

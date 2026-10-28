@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import threading
 import time
 from typing import Any, Callable
@@ -13,6 +14,7 @@ from .detector import draw_detections
 from .events import WsManager
 from .sources import is_network_source, open_capture
 from .tiling import merge_detections
+from .verifier import prepare_crop
 
 NETWORK_RETRY_CAP = 10.0
 FILE_RETRY_CAP = 60.0
@@ -42,6 +44,12 @@ class DetectionWorker(threading.Thread):
         self._tile_objects: list[dict[str, Any]] = []
         self._tile_expire = 0.0
         self._last_event_ts = 0.0
+        # 证据抽屉：留最近几帧原始缩略图、最近一次候选框与复核裁剪，
+        # 供 /api/agents/evidence 现场出图（全部来自真实采集帧）。
+        self._evidence_frames: collections.deque = collections.deque(maxlen=5)
+        self._last_objects: list[dict[str, Any]] = []
+        self._last_verify: dict[str, Any] | None = None
+        self._last_trace: dict[str, Any] | None = None
         # 复核只在"即将产生告警"的那一帧执行（约 0.25 秒），前端 3 秒采样几乎抓不到；
         # 因此累计统计并通过 trace 下发，让智能体页能看见它确实一直在工作。
         self._verify_stats: dict[str, Any] = {
@@ -62,6 +70,53 @@ class DetectionWorker(threading.Thread):
         self._verify_stats["last_ts"] = db.now_text()
         self._verify_stats["last_passed"] = bool(passed)
         self._verify_stats["last_confidence"] = round(float(confidence), 3)
+
+    def _remember_evidence_frame(self, frame, objects: list[dict[str, Any]]) -> None:
+        """把当前原始帧压成 320px 缩略图留档，供证据抽屉拼「最近 5 帧」。"""
+        h, w = frame.shape[:2]
+        if w <= 0 or h <= 0:
+            return
+        thumb = cv2.resize(frame, (320, max(1, round(h * 320 / w))), interpolation=cv2.INTER_AREA)
+        ok, buf = cv2.imencode(".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
+        if not ok:
+            return
+        smoke = max((d["confidence"] for d in objects if d["type"] == "smoke"), default=0.0)
+        self._evidence_frames.append({
+            "ts": db.now_text()[11:],
+            "objects": len(objects),
+            "smoke": round(float(smoke), 3),
+            "jpeg": buf.tobytes(),
+        })
+
+    def _remember_verify(
+        self,
+        frame: Any | None,
+        bbox: list[int] | None,
+        alarm_type: str,
+        confidence: float,
+        passed: bool,
+        threshold: float,
+    ) -> None:
+        """留档复核裁出的真实局部图；找不到触发目标时 crop 为空。"""
+        crop_bytes = None
+        if frame is not None and bbox:
+            crop = prepare_crop(frame, list(bbox), 0.25)
+            if crop.size:
+                h, w = crop.shape[:2]
+                if min(h, w) < 200:
+                    crop = cv2.resize(crop, (w * 2, h * 2), interpolation=cv2.INTER_NEAREST)
+                ok, buf = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+                if ok:
+                    crop_bytes = buf.tobytes()
+        self._last_verify = {
+            "ts": db.now_text()[11:],
+            "crop": crop_bytes,
+            "bbox": list(bbox) if bbox else None,
+            "type": alarm_type,
+            "confidence": round(float(confidence), 3),
+            "passed": bool(passed),
+            "threshold": float(threshold),
+        }
 
     def stop(self) -> None:
         self._stop.set()
@@ -100,7 +155,8 @@ class DetectionWorker(threading.Thread):
                     break
                 now = time.time()
                 s = self.settings_provider()
-                use_tiling = bool(int(s.get("tiling_enabled", 0))) and (
+                tiling_on = bool(int(s.get("tiling_enabled", 0)))
+                use_tiling = tiling_on and (
                     now - self._last_tile_ts >= float(s.get("tile_interval", 2))
                 )
                 if use_tiling:
@@ -117,6 +173,9 @@ class DetectionWorker(threading.Thread):
                     # 切片间隔内保持远景结果，避免烟雾告警因普通帧漏检而断档
                     if self._tile_objects and now < self._tile_expire:
                         objects = merge_detections(objects + self._tile_objects, 0.5)
+                # 证据抽屉用的现场快照必须在画框之前采集，保证是未经标注的原始帧
+                self._last_objects = list(objects)
+                self._remember_evidence_frame(frame, objects)
                 status, risk, alarm = self.engine.update(
                     now,
                     objects,
@@ -143,6 +202,14 @@ class DetectionWorker(threading.Thread):
                     if trigger is None:
                         verification_state["passed"] = False
                         self._record_verify(False, 0.0)
+                        self._remember_verify(
+                            None,
+                            None,
+                            alarm["alarm_type"],
+                            0.0,
+                            False,
+                            float(s.get("verify_threshold", 0.2)),
+                        )
                         alarm = None
                     else:
                         verified, verify_conf = self.detector.verify_region(
@@ -154,6 +221,14 @@ class DetectionWorker(threading.Thread):
                         verification_state["confidence"] = round(verify_conf, 3)
                         verification_state["passed"] = verified
                         self._record_verify(verified, verify_conf)
+                        self._remember_verify(
+                            frame,
+                            trigger["bbox"],
+                            alarm["alarm_type"],
+                            verify_conf,
+                            verified,
+                            float(s.get("verify_threshold", 0.2)),
+                        )
                         if not verified:
                             self.engine.last_alarm_ts = -1e9
                             alarm = None
@@ -169,6 +244,7 @@ class DetectionWorker(threading.Thread):
                     },
                     "farfield": {
                         "active": use_tiling,
+                        "enabled": tiling_on,
                         "tile_size": int(s.get("tile_size", 640)),
                         "interval": int(s.get("tile_interval", 2)),
                         "held": len(self._tile_objects),
@@ -185,6 +261,7 @@ class DetectionWorker(threading.Thread):
                         "alarm": alarm is not None,
                     },
                 }
+                self._last_trace = trace
                 ok_raw, raw_buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), FRAME_QUALITY])
                 if ok_raw:
                     self.latest_raw_jpeg = raw_buf.tobytes()
