@@ -35,7 +35,11 @@ const verifyText = computed(() => {
   const v = latest.value?.agents?.verification
   if (!v) return '等待数据'
   if (!v.active) return '已关闭'
-  if (v.passed === null) return v.triggered ? '复核中' : '待触发'
+  if (v.passed === null) {
+    const total = v.history?.total || 0
+    if (v.triggered) return '复核中'
+    return total ? `待触发 · 累计 ${total} 次` : '待触发'
+  }
   return v.passed ? `通过 · ${Math.round(v.confidence * 100)}%` : '已拦截'
 })
 
@@ -105,12 +109,21 @@ function agentDoing(key, t) {
   }
   if (key === 'verification') {
     const v = t.verification
+    const h = v.history || {}
     if (!v.active) return '复核已关闭'
-    if (!v.triggered) return '待触发（当前无告警）'
-    if (v.passed === null) return '局部复核中'
-    if (!v.passed) return '复核拦截'
-    const confidence = v.confidence === null || v.confidence === undefined ? '—' : `${Math.round(v.confidence * 100)}%`
-    return `复核通过 · ${confidence}`
+    if (v.triggered || v.passed !== null) {
+      if (v.passed === null) return '局部复核中'
+      const confidence = v.confidence === null || v.confidence === undefined ? '—' : `${Math.round(v.confidence * 100)}%`
+      return v.passed ? `复核通过 · ${confidence}` : '复核拦截'
+    }
+    // 复核只在告警触发帧执行，平时采样抓不到；用累计统计说明它一直在工作
+    if (h.total) {
+      const last = h.last_passed === null || h.last_passed === undefined
+        ? ''
+        : ` · 最近${h.last_passed ? '通过' : '拦截'} ${Math.round((h.last_confidence || 0) * 100)}%（${(h.last_ts || '').slice(11)}）`
+      return `累计复核 ${h.total} 次（通过 ${h.passed} · 拦截 ${h.blocked}）${last}`
+    }
+    return '待触发（当前无告警）'
   }
   const d = t.decision
   return d.alarm ? `已生成告警 · 风险 ${d.risk}` : `状态 ${d.status} · 风险 ${d.risk}`
@@ -140,11 +153,13 @@ function agentMetric(key, t) {
   }
   if (key === 'verification') {
     const v = t.verification
-    let value = '已关闭'
-    if (v.active) {
-      value = v.passed === null ? (v.triggered ? '复核中' : '待触发') : v.passed ? '通过' : '拦截'
+    const h = v.history || {}
+    if (!v.active) return { value: '关', caption: '复核已关闭' }
+    if (v.passed !== null && v.passed !== undefined) {
+      return { value: v.passed ? '通过' : '拦截', caption: '本次复核结果' }
     }
-    return { value, caption: '局部复核结果' }
+    if (h.total) return { value: `${h.total}`, caption: `累计复核（通过 ${h.passed}）` }
+    return { value: '—', caption: '尚无告警需复核' }
   }
   return { value: `${t.decision.risk}`, caption: '当前风险分' }
 }
@@ -193,7 +208,9 @@ const timeline = computed(() => {
       title: '复核 Agent',
       detail: t.verification.active
         ? t.verification.passed === null
-          ? (t.verification.triggered ? '局部复核进行中' : '未触发（当前无告警）')
+          ? (t.verification.triggered
+            ? '局部复核进行中'
+            : (t.verification.history?.total ? `未触发（累计已复核 ${t.verification.history.total} 次）` : '未触发（当前无告警）'))
           : t.verification.passed
             ? `局部复核通过，置信度 ${Math.round(t.verification.confidence * 100)}%`
             : '局部复核不通过，已抑制告警'
