@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRealtime } from '../composables/useRealtime'
+import FireAlertOverlay from '../components/FireAlertOverlay.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -68,6 +69,7 @@ function openAlarms() {
         <router-view />
       </el-main>
     </el-container>
+    <FireAlertOverlay />
   </el-container>
 </template>
 
