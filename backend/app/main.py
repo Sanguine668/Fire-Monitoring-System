@@ -392,8 +392,13 @@ def create_app() -> FastAPI:
 
     @app.post("/api/alarms/{alarm_id}/ack")
     def ack(alarm_id: int) -> dict[str, Any]:
+        row = db.get_alarm(alarm_id)
+        if not row:
+            raise HTTPException(404, "alarm not found or already handled")
         if not db.ack_alarm(alarm_id):
             raise HTTPException(404, "alarm not found or already handled")
+        # 处理完这条告警即视为"这一轮结束"，释放该视频源的推送名额，下次新告警可以再推
+        db.release_notification(int(row["camera_id"]))
         return {"ok": True, "id": alarm_id}
 
     @app.post("/api/alarms/ack_group")
@@ -401,6 +406,7 @@ def create_app() -> FastAPI:
         count = db.ack_alarm_group(payload.camera_id, payload.alarm_type)
         if count == 0:
             raise HTTPException(404, "no unhandled alarm found for this camera and type")
+        db.release_notification(payload.camera_id)
         return {"ok": True, "handled": count}
 
     def _mask_key(key: str) -> str:

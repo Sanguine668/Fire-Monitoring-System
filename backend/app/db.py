@@ -302,6 +302,12 @@ def clear_notifications() -> int:
         return c.execute("DELETE FROM alarm_notifications").rowcount
 
 
+def release_notification(camera_id: int) -> int:
+    """释放某路视频源的推送名额：告警被确认处理后，下次新告警可以再推一次。"""
+    with _conn() as c:
+        return c.execute("DELETE FROM alarm_notifications WHERE camera_id=?", (camera_id,)).rowcount
+
+
 def bump_notify_daily() -> None:
     """每尝试推送一次就 +1；写在独立表里，重启清空 alarm_notifications 也不会归零。"""
     with _conn() as c:
