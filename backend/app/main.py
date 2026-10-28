@@ -306,6 +306,15 @@ def create_app() -> FastAPI:
             reg.stop_camera(camera_id)
         return {"id": camera_id, "enabled": 1 if enabled else 0}
 
+    @app.post("/api/cameras/{camera_id}/alerts")
+    def toggle_alerts(camera_id: int) -> dict[str, Any]:
+        camera = db.get_camera(camera_id)
+        if not camera:
+            raise HTTPException(404, "camera not found")
+        enabled = not bool(camera["alerts_enabled"])
+        db.set_camera_alerts(camera_id, enabled)
+        return {"id": camera_id, "alerts_enabled": 1 if enabled else 0}
+
     @app.delete("/api/cameras/{camera_id}")
     def delete(camera_id: int, reg: CameraRegistry = Depends(registry)) -> dict[str, Any]:
         reg.stop_camera(camera_id)
