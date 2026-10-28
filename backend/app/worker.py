@@ -42,6 +42,26 @@ class DetectionWorker(threading.Thread):
         self._tile_objects: list[dict[str, Any]] = []
         self._tile_expire = 0.0
         self._last_event_ts = 0.0
+        # 复核只在"即将产生告警"的那一帧执行（约 0.25 秒），前端 3 秒采样几乎抓不到；
+        # 因此累计统计并通过 trace 下发，让智能体页能看见它确实一直在工作。
+        self._verify_stats: dict[str, Any] = {
+            "total": 0,
+            "passed": 0,
+            "blocked": 0,
+            "last_ts": "",
+            "last_passed": None,
+            "last_confidence": None,
+        }
+
+    def _record_verify(self, passed: bool, confidence: float) -> None:
+        self._verify_stats["total"] += 1
+        if passed:
+            self._verify_stats["passed"] += 1
+        else:
+            self._verify_stats["blocked"] += 1
+        self._verify_stats["last_ts"] = db.now_text()
+        self._verify_stats["last_passed"] = bool(passed)
+        self._verify_stats["last_confidence"] = round(float(confidence), 3)
 
     def stop(self) -> None:
         self._stop.set()
@@ -111,6 +131,7 @@ class DetectionWorker(threading.Thread):
                     "triggered": False,
                     "passed": None,
                     "confidence": None,
+                    "history": dict(self._verify_stats),
                 }
                 if alarm is not None and verify_enabled:
                     verification_state["triggered"] = True
@@ -121,6 +142,7 @@ class DetectionWorker(threading.Thread):
                     )
                     if trigger is None:
                         verification_state["passed"] = False
+                        self._record_verify(False, 0.0)
                         alarm = None
                     else:
                         verified, verify_conf = self.detector.verify_region(
@@ -131,12 +153,14 @@ class DetectionWorker(threading.Thread):
                         )
                         verification_state["confidence"] = round(verify_conf, 3)
                         verification_state["passed"] = verified
+                        self._record_verify(verified, verify_conf)
                         if not verified:
                             self.engine.last_alarm_ts = -1e9
                             alarm = None
                         else:
                             alarm["verified"] = True
                             alarm["verify_confidence"] = round(verify_conf, 3)
+                    verification_state["history"] = dict(self._verify_stats)
                 trace = {
                     "perception": {
                         "active": True,

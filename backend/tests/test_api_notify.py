@@ -67,3 +67,28 @@ def test_notify_reset_clears_records() -> None:
         assert len(client.get("/api/notify").json()["records"]) == 1
         assert client.post("/api/notify/reset").json()["cleared"] == 1
         assert client.get("/api/notify").json()["records"] == []
+
+
+def test_ack_releases_camera_push_slot() -> None:
+    """确认处理某条告警后，该视频源的推送名额应被释放，下次新告警可再推。"""
+    _reset()
+    db.clear_alarms()
+    alarm = db.create_alarm(5, "东门", "fire", "critical", 0.9, 1)
+    with TestClient(app) as client:
+        assert db.reserve_notification(5, alarm["id"], "fire", "标题") is True
+        assert db.reserve_notification(5, alarm["id"] + 1, "fire", "标题2") is False
+
+        assert client.post(f"/api/alarms/{alarm['id']}/ack").json()["ok"] is True
+
+        # 名额已释放
+        assert db.reserve_notification(5, alarm["id"] + 2, "fire", "标题3") is True
+
+
+def test_ack_group_releases_camera_push_slot() -> None:
+    _reset()
+    db.clear_alarms()
+    db.create_alarm(6, "西门", "smoke", "warning", 0.6, 0)
+    with TestClient(app) as client:
+        assert db.reserve_notification(6, 900, "smoke", "标题") is True
+        assert client.post("/api/alarms/ack_group", json={"camera_id": 6, "alarm_type": "smoke"}).json()["handled"] == 1
+        assert db.reserve_notification(6, 901, "smoke", "标题2") is True

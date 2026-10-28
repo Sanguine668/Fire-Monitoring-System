@@ -35,7 +35,11 @@ const verifyText = computed(() => {
   const v = latest.value?.agents?.verification
   if (!v) return '等待数据'
   if (!v.active) return '已关闭'
-  if (v.passed === null) return v.triggered ? '复核中' : '待触发'
+  if (v.passed === null) {
+    const total = v.history?.total || 0
+    if (v.triggered) return '复核中'
+    return total ? `待触发 · 累计 ${total} 次` : '待触发'
+  }
   return v.passed ? `通过 · ${Math.round(v.confidence * 100)}%` : '已拦截'
 })
 
@@ -44,8 +48,144 @@ const activeStage = computed(() => {
   if (!t) return ''
   if (t.verification.triggered) return 'verification'
   if (t.decision.alarm) return 'decision'
+  if (t.temporal.smoke_streak > 0) return 'temporal'
   if (t.farfield.active) return 'farfield'
-  return 'perception'
+  return t.perception.active ? 'perception' : ''
+})
+
+const STATE_META = {
+  running: { label: '运行中', color: '#23a06b', ink: '#1b7d53' },
+  processing: { label: '处理中', color: '#e6a23c', ink: '#b9781d' },
+  alert: { label: '告警', color: '#e5484d', ink: '#c52f34' },
+  idle: { label: '待命', color: '#c0c4cc', ink: '#7b8494' }
+}
+
+const ACTIVE_ACTIONS = {
+  perception: '整图烟火检测',
+  farfield: '切片扫描',
+  temporal: '连续帧确认',
+  verification: '局部复核',
+  decision: '风险分级'
+}
+
+function agentStatus(key, t) {
+  if (!t) return STATE_META.idle
+  if (key === 'perception') {
+    return t.perception.active ? STATE_META.running : STATE_META.idle
+  }
+  if (key === 'farfield') {
+    return t.farfield.active ? STATE_META.processing : STATE_META.running
+  }
+  if (key === 'temporal') {
+    return t.temporal.smoke_streak > 0 ? STATE_META.processing : STATE_META.running
+  }
+  if (key === 'verification') {
+    const v = t.verification
+    if (!v.active) return STATE_META.idle
+    if (!v.triggered) return STATE_META.idle
+    if (v.passed === null) return STATE_META.processing
+    return v.passed ? STATE_META.running : STATE_META.alert
+  }
+  const d = t.decision
+  return d.alarm || d.status === 'critical' || d.status === 'warning' ? STATE_META.alert : STATE_META.running
+}
+
+function agentDoing(key, t) {
+  if (!t) return '等待检测数据'
+  if (key === 'perception') {
+    const p = t.perception
+    if (!p.active) return '感知已停止 · 等待画面恢复'
+    return `整图检测 · 检出 ${p.objects} 个候选（最高置信度 ${Number(p.top_confidence ?? 0).toFixed(2)}）`
+  }
+  if (key === 'farfield') {
+    const f = t.farfield
+    return f.active
+      ? `切片扫描中 · ${f.tile_size} 瓦片`
+      : `整图模式 · 保留 ${f.held} 个切片结果`
+  }
+  if (key === 'temporal') {
+    const m = t.temporal
+    return `烟雾连续 ${m.smoke_streak}/${m.required} 帧 · 冷却 ${m.cooldown}s`
+  }
+  if (key === 'verification') {
+    const v = t.verification
+    const h = v.history || {}
+    if (!v.active) return '复核已关闭'
+    if (v.triggered || v.passed !== null) {
+      if (v.passed === null) return '局部复核中'
+      const confidence = v.confidence === null || v.confidence === undefined ? '—' : `${Math.round(v.confidence * 100)}%`
+      return v.passed ? `复核通过 · ${confidence}` : '复核拦截'
+    }
+    // 复核只在告警触发帧执行，平时采样抓不到；用累计统计说明它一直在工作
+    if (h.total) {
+      const last = h.last_passed === null || h.last_passed === undefined
+        ? ''
+        : ` · 最近${h.last_passed ? '通过' : '拦截'} ${Math.round((h.last_confidence || 0) * 100)}%（${(h.last_ts || '').slice(11)}）`
+      return `累计复核 ${h.total} 次（通过 ${h.passed} · 拦截 ${h.blocked}）${last}`
+    }
+    return '待触发（当前无告警）'
+  }
+  const d = t.decision
+  return d.alarm ? `已生成告警 · 风险 ${d.risk}` : `状态 ${d.status} · 风险 ${d.risk}`
+}
+
+function agentMetric(key, t) {
+  if (key === 'farfield') {
+    if (!t) return { value: '—', caption: '瓦片边长 / 保留数' }
+    return t.farfield.active
+      ? { value: `${t.farfield.tile_size}`, caption: '瓦片边长 (px)' }
+      : { value: `${t.farfield.held}`, caption: '保留切片数' }
+  }
+  if (!t) {
+    const captions = {
+      perception: '候选数',
+      temporal: '连续烟雾帧',
+      verification: '局部复核结果',
+      decision: '当前风险分'
+    }
+    return { value: '—', caption: captions[key] || '主指标' }
+  }
+  if (key === 'perception') {
+    return { value: `${t.perception.objects}`, caption: '候选数' }
+  }
+  if (key === 'temporal') {
+    return { value: `${t.temporal.smoke_streak}/${t.temporal.required}`, caption: '连续烟雾帧' }
+  }
+  if (key === 'verification') {
+    const v = t.verification
+    const h = v.history || {}
+    if (!v.active) return { value: '关', caption: '复核已关闭' }
+    if (v.passed !== null && v.passed !== undefined) {
+      return { value: v.passed ? '通过' : '拦截', caption: '本次复核结果' }
+    }
+    if (h.total) return { value: `${h.total}`, caption: `累计复核（通过 ${h.passed}）` }
+    return { value: '—', caption: '尚无告警需复核' }
+  }
+  return { value: `${t.decision.risk}`, caption: '当前风险分' }
+}
+
+const agentCards = computed(() => {
+  const t = latest.value?.agents
+  return (info.value.agents || []).map((agent, index) => ({
+    ...agent,
+    index,
+    status: agentStatus(agent.key, t),
+    doing: agentDoing(agent.key, t),
+    metric: agentMetric(agent.key, t),
+    isActive: activeStage.value === agent.key
+  }))
+})
+
+const activeSummary = computed(() => {
+  const stage = activeStage.value
+  if (!latest.value || !stage) return null
+  const agent = info.value.agents.find((item) => item.key === stage)
+  if (!agent) return null
+  return {
+    name: agent.name,
+    action: ACTIVE_ACTIONS[stage] || agent.role,
+    color: agentStatus(stage, latest.value.agents).ink
+  }
 })
 
 const metricBlocks = computed(() => [
@@ -68,7 +208,9 @@ const timeline = computed(() => {
       title: '复核 Agent',
       detail: t.verification.active
         ? t.verification.passed === null
-          ? (t.verification.triggered ? '局部复核进行中' : '未触发（当前无告警）')
+          ? (t.verification.triggered
+            ? '局部复核进行中'
+            : (t.verification.history?.total ? `未触发（累计已复核 ${t.verification.history.total} 次）` : '未触发（当前无告警）'))
           : t.verification.passed
             ? `局部复核通过，置信度 ${Math.round(t.verification.confidence * 100)}%`
             : '局部复核不通过，已抑制告警'
@@ -88,33 +230,6 @@ function pct(value) {
 
 function cameraName(id) {
   return cameras.value.find((c) => c.id === id)?.name || `视频源 ${id}`
-}
-
-function liveState(key) {
-  const t = latest.value?.agents
-  if (!t) return { text: '等待数据', type: 'info' }
-  if (key === 'perception') {
-    return { text: `${t.perception.objects} 个候选`, type: t.perception.objects ? 'success' : 'info' }
-  }
-  if (key === 'farfield') {
-    return { text: t.farfield.active ? '切片扫描中' : '整图模式', type: t.farfield.active ? 'warning' : 'info' }
-  }
-  if (key === 'temporal') {
-    return { text: `${t.temporal.smoke_streak}/${t.temporal.required} 帧`, type: t.temporal.smoke_streak ? 'warning' : 'info' }
-  }
-  if (key === 'verification') {
-    const v = t.verification
-    if (!v.active) return { text: '已关闭', type: 'info' }
-    if (v.passed === null) return { text: v.triggered ? '复核中' : '待触发', type: 'info' }
-    return v.passed ? { text: '已通过', type: 'success' } : { text: '已拦截', type: 'danger' }
-  }
-  const d = t.decision
-  return { text: d.alarm ? '已生成告警' : d.status, type: d.alarm ? 'danger' : d.status === 'normal' ? 'success' : 'warning' }
-}
-
-function nodeState(key) {
-  const type = liveState(key).type
-  return { 'state-ok': type === 'success', 'state-warn': type === 'warning', 'state-danger': type === 'danger' }
 }
 
 function syncSample() {
@@ -175,33 +290,72 @@ onUnmounted(() => clearInterval(timer))
       </div>
     </div>
 
+    <!-- 智能体运行概览：五个独立状态卡 -->
+    <div class="agent-overview">
+      <div class="agent-summary">
+        <span
+          class="summary-dot"
+          :style="{ background: activeSummary ? activeSummary.color : '#c0c4cc' }"
+          aria-hidden="true"
+        />
+        <span class="summary-copy">
+          <template v-if="activeSummary">当前由 <b>{{ activeSummary.name }}</b> 执行{{ activeSummary.action }}</template>
+          <template v-else>等待检测数据 · 五个智能体处于待命状态</template>
+        </span>
+        <span class="summary-meta">
+          共 {{ info.agents.length }} 个智能体<template v-if="latest"> · {{ cameraName(latest.camera_id) }}</template>
+        </span>
+      </div>
+
+      <div class="agent-grid">
+        <article
+          v-for="card in agentCards"
+          :key="card.key"
+          class="agent-card"
+          :class="{ 'is-active': card.isActive }"
+          :style="{ '--state-color': card.status.color, '--state-ink': card.status.ink }"
+        >
+          <span class="agent-bar" :class="{ 'is-live': card.isActive }" aria-hidden="true" />
+          <div class="agent-card-body">
+            <div class="agent-head">
+              <span class="agent-index" aria-hidden="true">{{ card.index + 1 }}</span>
+              <h3 class="agent-name">{{ card.name }}</h3>
+              <span class="agent-status">{{ card.status.label }}</span>
+            </div>
+
+            <div class="agent-role">
+              <span class="role-label">负责</span>
+              <span>{{ card.role }}</span>
+            </div>
+
+            <div class="agent-doing">
+              <span class="doing-label">本轮正在做</span>
+              <p>{{ card.doing }}</p>
+            </div>
+
+            <div class="agent-metric">
+              <strong>{{ card.metric.value }}</strong>
+              <span>{{ card.metric.caption }}</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <!-- 最新轨迹与当前决策：沿用 15 / 9 分栏，保留风险分仪表盘 -->
     <el-row :gutter="16">
       <el-col :span="15">
-        <el-card shadow="never" class="pipeline-panel">
+        <el-card shadow="never" class="trajectory-panel">
           <template #header>
             <div class="panel-head">
-              <b>Agent 流水线</b>
+              <b>最新决策轨迹</b>
               <span class="sub">当前画面：{{ latest ? cameraName(latest.camera_id) : '等待视频源' }}</span>
             </div>
           </template>
 
-          <div class="pipeline">
-            <template v-for="(agent, index) in info.agents" :key="agent.key">
-              <div class="node" :class="[nodeState(agent.key), { active: activeStage === agent.key }]">
-                <div class="node-top">
-                  <span class="node-num">{{ index + 1 }}</span>
-                  <b>{{ agent.name }}</b>
-                </div>
-                <div class="node-role">{{ agent.role }}</div>
-                <div class="node-status">{{ liveState(agent.key).text }}</div>
-              </div>
-              <span v-if="index < info.agents.length - 1" class="connector">→</span>
-            </template>
-          </div>
-
           <div class="evidence">
             <div class="evidence-title">
-              最新决策轨迹
+              本轮执行摘要
               <span>每 3 秒采样一次，避免数字闪烁</span>
             </div>
             <div v-if="timeline.length === 0" class="empty">等待检测数据，请先到「实时监控」打开视频源。</div>
@@ -293,43 +447,95 @@ onUnmounted(() => clearInterval(timer))
 .agents-page { position: relative; min-height: 480px; }
 .agents-page :deep(.el-row) { align-items: stretch; }
 .agents-page :deep(.el-col) { display: flex; }
-.pipeline-panel, .decision-panel { height: 100%; flex: 1; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .head-left { display: flex; align-items: center; gap: 10px; }
 .toolbar-hint { color: #8b93a1; font-size: 0.9375rem; }
 .head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.panel-head { display: flex; align-items: center; justify-content: space-between; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .sub { color: #9aa2b0; font-size: 0.9375rem; }
-.pipeline { display: flex; align-items: stretch; gap: 2px; padding: 10px 0 14px; }
-.node {
-  flex: 1; min-width: 0; padding: 10px; border: 1px solid #e5e7eb; border-left: 3px solid #c0c4cc;
-  border-radius: 10px; background: #fafbfc; transition: all .2s;
+
+/* ── 智能体概览：值班摘要 + 五张独立状态卡 ───────────────── */
+.agent-overview { margin-bottom: 16px; }
+.agent-summary {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 9px 12px;
+  background: #fff; border: 1px solid #e5e7eb; border-left: 3px solid #1f4d78;
+  border-radius: 6px; color: #606776; font-size: 0.9375rem; line-height: 1.4;
 }
-.node.active { background: #fff; border-color: #1f4d78; box-shadow: 0 0 0 2px rgba(31, 77, 120, .12); }
-.node.state-ok { border-left-color: #23a06b; }
-.node.state-warn { border-left-color: #e6a23c; }
-.node.state-danger { border-left-color: #e5484d; }
-.node-top { display: flex; align-items: center; gap: 6px; }
-.node-num { color: #1f4d78; font-weight: 700; font-size: 0.875rem; }
-.node-top b { font-size: 0.9375rem; white-space: normal; overflow: visible; }
-.node-role { color: #9aa2b0; font-size: 0.875rem; margin: 4px 0 8px; }
-.node-status { color: #303133; font-size: 0.9375rem; font-weight: 600; min-height: 18px; }
-.connector { align-self: center; color: #c0c4cc; font-size: 1.125rem; padding: 0 2px; }
-.evidence { border-top: 1px dashed #e5e7eb; padding-top: 12px; }
-.evidence-title { display: flex; align-items: baseline; gap: 8px; font-weight: 600; font-size: 1rem; margin-bottom: 8px; }
+.summary-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; }
+.summary-copy { min-width: 0; }
+.summary-copy b { color: #1f2d3d; }
+.summary-meta { margin-left: auto; color: #9aa2b0; font-size: 0.8125rem; white-space: nowrap; }
+.agent-grid { display: grid; gap: 1rem; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 1500px) { .agent-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1000px) { .agent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .agent-grid { grid-template-columns: minmax(0, 1fr); } }
+.agent-card {
+  --state-color: #c0c4cc;
+  --state-ink: #7b8494;
+  display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(31, 45, 61, .04);
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+}
+.agent-card:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(31, 45, 61, .1); }
+.agent-card.is-active {
+  border-color: color-mix(in srgb, var(--state-color) 42%, #e5e7eb);
+  box-shadow: 0 6px 20px rgba(31, 77, 120, .11);
+}
+.agent-bar { display: block; height: 4px; flex: 0 0 4px; background: var(--state-color); }
+.agent-bar.is-live { animation: agent-bar-pulse 1.6s ease-in-out infinite; }
+@keyframes agent-bar-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .28; } }
+.agent-card-body { display: flex; flex: 1; flex-direction: column; gap: 12px; padding: 14px 14px 16px; }
+.agent-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.agent-index {
+  width: 1.5rem; height: 1.5rem; flex: 0 0 1.5rem; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: color-mix(in srgb, var(--state-color) 13%, #fff);
+  color: var(--state-ink); font-size: 0.8125rem; font-weight: 700;
+}
+.agent-name { flex: 1; min-width: 0; margin: 0; color: #1f2d3d; font-size: 1.125rem; font-weight: 700; line-height: 1.25; }
+.agent-status {
+  display: inline-flex; align-items: center; flex: 0 0 auto; padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--state-color) 28%, #fff); border-radius: 999px;
+  background: color-mix(in srgb, var(--state-color) 10%, #fff);
+  color: var(--state-ink); font-size: 0.75rem; font-weight: 600; line-height: 1.5; white-space: nowrap;
+}
+.agent-role { display: flex; align-items: baseline; gap: 6px; color: #303133; font-size: 0.9375rem; line-height: 1.45; }
+.role-label { flex: 0 0 auto; color: #8b93a1; font-size: 0.75rem; font-weight: 600; letter-spacing: .02em; }
+.agent-doing {
+  padding: 9px 10px; border-left: 3px solid var(--state-color); border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--state-color) 8%, #fff);
+}
+.doing-label { display: block; margin-bottom: 3px; color: #8b93a1; font-size: 0.75rem; font-weight: 600; letter-spacing: .02em; }
+.agent-doing p { margin: 0; color: #303133; font-size: 0.875rem; font-weight: 600; line-height: 1.45; }
+.agent-metric {
+  display: flex; align-items: baseline; gap: 8px; min-width: 0; margin-top: auto;
+  padding-top: 12px; border-top: 1px dashed #e5e7eb;
+}
+.agent-metric strong {
+  color: var(--state-ink); font-size: 1.75rem; font-weight: 700; line-height: 1.05;
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+}
+.agent-metric span { color: #8b93a1; font-size: 0.75rem; line-height: 1.35; }
+
+/* ── 最新决策轨迹 / 当前决策 ─────────────────────────────── */
+.trajectory-panel, .decision-panel { height: 100%; flex: 1; }
+.evidence { padding-top: 2px; }
+.evidence-title { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-weight: 600; font-size: 1rem; }
 .evidence-title span { color: #9aa2b0; font-weight: 400; font-size: 0.875rem; }
-.evidence-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 0.9375rem; color: #606776; }
+.evidence-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; color: #606776; font-size: 0.9375rem; }
 .evidence-row b { flex: 0 0 auto; min-width: 88px; white-space: nowrap; color: #303133; }
-.evidence-dot { width: 6px; height: 6px; border-radius: 50%; background: #1f4d78; flex: 0 0 6px; }
-.empty { color: #9aa2b0; font-size: 0.875rem; padding: 10px 0; }
+.evidence-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #1f4d78; }
+.empty { padding: 10px 0; color: #9aa2b0; font-size: 0.875rem; }
 .gauge { display: flex; justify-content: center; padding: 4px 0 2px; }
-.gauge-value { font-size: 1.75rem; font-weight: 700; color: #1f2d3d; }
+.gauge-value { color: #1f2d3d; font-size: 1.75rem; font-weight: 700; }
 .gauge-label { color: #9aa2b0; font-size: 0.875rem; }
-.decision-meta { display: flex; justify-content: space-around; color: #8b93a1; font-size: 0.9375rem; margin: 4px 0 12px; }
+.decision-meta { display: flex; justify-content: space-around; margin: 4px 0 12px; color: #8b93a1; font-size: 0.9375rem; }
 .decision-rows { display: grid; gap: 8px; }
-.decision-rows div { display: flex; justify-content: space-between; font-size: 1rem; padding: 8px 10px; background: #fafbfc; border-radius: 6px; }
+.decision-rows div { display: flex; justify-content: space-between; padding: 8px 10px; background: #fafbfc; border-radius: 6px; font-size: 1rem; }
 .decision-rows span { color: #8b93a1; }
 .decision-rows b { color: #303133; }
+
+/* ── 指标带 / 最近轨迹表 ───────────────────────────────── */
 .metric-band {
   display: flex; gap: 0; margin-top: 16px; background: #fff; border: 1px solid #e5e7eb;
   border-radius: 8px; overflow: hidden;
@@ -337,15 +543,20 @@ onUnmounted(() => clearInterval(timer))
 .metric-block { flex: 1; padding: 12px 16px; border-right: 1px solid #eef0f4; }
 .metric-block:last-child { border-right: none; }
 .metric-block span { display: block; color: #8b93a1; font-size: 0.875rem; }
-.metric-block strong { display: block; font-size: 1.25rem; margin: 4px 0 2px; color: #1f2d3d; }
+.metric-block strong { display: block; margin: 4px 0 2px; color: #1f2d3d; font-size: 1.25rem; }
 .metric-block small { color: #a8b0bd; font-size: 0.875rem; }
 .recent-panel { margin-top: 16px; }
 .recent-panel :deep(.el-table) { font-size: 0.9375rem; }
+
 @media (max-width: 1200px) {
-  .pipeline { flex-wrap: wrap; }
-  .node { flex: 1 1 150px; }
-  .connector { display: none; }
+  .summary-meta { margin-left: 0; }
   .metric-band { flex-wrap: wrap; }
   .metric-block { flex: 1 1 30%; border-bottom: 1px solid #eef0f4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-bar.is-live { animation: none; }
+  .agent-card { transition: none; }
+  .agent-card:hover { transform: none; }
 }
 </style>
