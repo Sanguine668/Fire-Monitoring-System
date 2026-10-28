@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 import cv2
 
-from . import db
+from . import alarm_store, db
 from .alarm_engine import AlarmEngine
 from .config import DEFAULT_FPS, FRAME_QUALITY
 from .detector import draw_detections
@@ -25,6 +25,7 @@ class DetectionWorker(threading.Thread):
         detector,
         ws: WsManager,
         settings_provider: Callable[[], dict[str, Any]],
+        notifier: Any | None = None,
     ) -> None:
         super().__init__(daemon=True)
         self.camera = camera
@@ -32,6 +33,7 @@ class DetectionWorker(threading.Thread):
         self.detector = detector
         self.ws = ws
         self.settings_provider = settings_provider
+        self.notifier = notifier
         self._stop = threading.Event()
         self.latest_jpeg: bytes | None = None
         self.latest_raw_jpeg: bytes | None = None
@@ -190,16 +192,22 @@ class DetectionWorker(threading.Thread):
                     self._send(payload)
                     self._last_event_ts = now
                 if alarm is not None:
-                    record = db.create_alarm(
-                        self.camera_id,
-                        self.camera["name"],
-                        alarm["alarm_type"],
-                        alarm["level"],
-                        alarm["confidence"],
-                        1 if alarm.get("verified") else 0,
-                    )
-                    record["agents"] = trace
-                    self._send({"event": "alarm", "alarm": record})
+                    try:
+                        record = alarm_store.persist_alarm(
+                            camera_id=self.camera_id,
+                            camera_name=self.camera["name"],
+                            alarm=alarm,
+                            visible=visible,
+                            frame_jpeg=self.latest_jpeg or b"",
+                            frame_size=(frame.shape[1], frame.shape[0]),
+                            notifier=self.notifier,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        record = None
+                        self._send({"event": "alarm_error", "camera_id": self.camera_id, "message": str(exc)[:200]})
+                    if record is not None:
+                        record["agents"] = trace
+                        self._send({"event": "alarm", "alarm": record})
                 time.sleep(max(0.0, interval - (time.time() - now)))
             cap.release()
             db.set_camera_online(self.camera_id, False)

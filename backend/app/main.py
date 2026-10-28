@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 from contextlib import asynccontextmanager
@@ -9,11 +10,13 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import db
-from .config import MODEL_PATH, UPLOADS
+from . import snapshots
+from . import notify
+from .config import MODEL_PATH, PUBLIC_BASE, UPLOADS
 from .detector import YoloDetector
 from .events import WsManager
 from .static import mount_frontend
@@ -46,6 +49,17 @@ class AckGroupPayload(BaseModel):
     alarm_type: str = Field(pattern="^(fire|smoke)$")
 
 
+class NotifyPayload(BaseModel):
+    enabled: int = Field(default=0, ge=0, le=1)
+    sendkey: str = ""
+    name: str = ""
+    daily_limit: int = Field(default=5, ge=1, le=1000)
+
+
+class NotifyTestPayload(BaseModel):
+    sendkey: str = ""
+
+
 class ProbePayload(BaseModel):
     source: str = Field(min_length=1)
 
@@ -59,11 +73,12 @@ class CameraRegistry:
         self.workers: dict[int, DetectionWorker] = {}
         self.detector: YoloDetector | None = None
         self.ws = WsManager()
+        self.notifier: notify.Notifier | None = None
 
     def start_camera(self, camera: dict[str, Any]) -> None:
         if not camera["enabled"] or camera["id"] in self.workers:
             return
-        w = DetectionWorker(camera, self.detector, self.ws, db.get_settings)
+        w = DetectionWorker(camera, self.detector, self.ws, db.get_settings, notifier=self.notifier)
         self.workers[camera["id"]] = w
         w.start()
 
@@ -73,21 +88,57 @@ class CameraRegistry:
             w.stop()
 
 
+def _preferred_lan_ip() -> str:
+    """挑选最可能被手机访问到的本机 IPv4，优先 192.168 网段。"""
+    import socket
+
+    import psutil
+
+    addresses: list[str] = []
+    for _name, addrs in psutil.net_if_addrs().items():
+        for addr in addrs:
+            if addr.family != socket.AF_INET:
+                continue
+            ip = addr.address
+            if ip.startswith("127.") or ip.startswith("169.254."):
+                continue
+            addresses.append(ip)
+    if not addresses:
+        return ""
+    addresses.sort(key=lambda ip: {"192": 0, "10": 1, "172": 2}.get(ip.split(".")[0], 3))
+    return addresses[0]
+
+
+def _public_base_url() -> str:
+    """推送消息里使用的系统地址；配置了 FIREGUARD_PUBLIC_BASE 时优先用它。"""
+    if PUBLIC_BASE:
+        return PUBLIC_BASE.rstrip("/")
+    ip = _preferred_lan_ip()
+    return f"http://{ip}:8000" if ip else ""
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         db.init_db()
         if not MODEL_PATH.is_file():
             raise RuntimeError(f"模型不存在: {MODEL_PATH}，请先完成 AI 训练")
+        snapshots.cleanup_old_frames(days=7)
+        db.clear_notifications()  # 每次启动视为新一轮，各路视频源恢复可推
+        notifier = notify.Notifier(base_url_provider=_public_base_url)
+        notifier.start()
         registry = CameraRegistry()
+        registry.notifier = notifier
         registry.detector = YoloDetector(str(MODEL_PATH))
         registry.ws.set_loop(asyncio.get_running_loop())
         app.state.registry = registry
+        app.state.notifier = notifier
         for camera in db.list_cameras():
             registry.start_camera(camera)
         yield
         for w in list(registry.workers.values()):
             w.stop()
+        notifier.stop()
 
     app = FastAPI(title="FireGuard AI Backend", version="0.2.0", lifespan=lifespan)
     app.add_middleware(
@@ -267,7 +318,35 @@ def create_app() -> FastAPI:
 
     @app.delete("/api/alarms")
     def clear_alarms() -> dict[str, Any]:
-        return {"ok": True, "deleted": db.clear_alarms()}
+        deleted = db.clear_alarms()
+        for item in deleted:
+            snapshots.delete_alarm_frames(int(item["camera_id"]), int(item["id"]))
+        return {"ok": True, "deleted": len(deleted)}
+
+    @app.get("/api/alarms/{alarm_id}")
+    def alarm_detail(alarm_id: int) -> dict[str, Any]:
+        row = db.get_alarm(alarm_id)
+        if not row:
+            raise HTTPException(404, "alarm not found")
+        raw = row.get("boxes") or ""
+        try:
+            row["boxes"] = json.loads(raw) if raw else []
+        except ValueError:
+            row["boxes"] = []
+        return row
+
+    @app.get("/api/alarms/{alarm_id}/frame")
+    def alarm_frame(alarm_id: int, variant: str = "first"):
+        """返回告警对应的画面帧；variant=first 是触发瞬间，latest 是最近一次。"""
+        if variant not in snapshots.VARIANTS:
+            raise HTTPException(400, "variant must be first or latest")
+        row = db.get_alarm(alarm_id)
+        if not row:
+            raise HTTPException(404, "alarm not found")
+        path = snapshots.resolve_frame(row.get(f"snapshot_{variant}") or "")
+        if path is None:
+            raise HTTPException(404, "frame not found")
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/model")
     def model_info(reg: CameraRegistry = Depends(registry)) -> dict[str, Any]:
@@ -323,6 +402,54 @@ def create_app() -> FastAPI:
         if count == 0:
             raise HTTPException(404, "no unhandled alarm found for this camera and type")
         return {"ok": True, "handled": count}
+
+    def _mask_key(key: str) -> str:
+        return f"****{key[-4:]}" if len(key) > 4 else ("****" if key else "")
+
+    def _notify_view() -> dict[str, Any]:
+        cfg = db.get_notify_config()
+        notifier = getattr(app.state, "notifier", None)
+        return {
+            "enabled": cfg["enabled"],
+            "sendkey_masked": _mask_key(cfg["sendkey"]),
+            "name": cfg["name"],
+            "daily_limit": cfg["daily_limit"],
+            "configured": bool(cfg["sendkey"]),
+            "sent_today": db.notifications_sent_today(),
+            "records": db.list_notifications(),
+            "last_skip": getattr(notifier, "last_skip", "") if notifier else "",
+        }
+
+    @app.get("/api/notify")
+    def notify_config() -> dict[str, Any]:
+        return _notify_view()
+
+    @app.put("/api/notify")
+    def save_notify(payload: NotifyPayload) -> dict[str, Any]:
+        current = db.get_notify_config()
+        sendkey = payload.sendkey.strip()
+        if "****" in sendkey:  # 前端回传的是掩码，保留原值
+            sendkey = current["sendkey"]
+        db.save_notify_config(payload.enabled, sendkey, payload.name.strip(), payload.daily_limit)
+        return _notify_view()
+
+    @app.post("/api/notify/test")
+    def notify_test(payload: NotifyTestPayload) -> dict[str, Any]:
+        cfg = db.get_notify_config()
+        sendkey = payload.sendkey.strip() or cfg["sendkey"]
+        if not sendkey:
+            return {"ok": False, "code": None, "message": "未配置 SendKey，请先填写并保存"}
+        title = "【火情监测】推送测试"
+        desp = (
+            "### 推送测试\n\n"
+            f"- **接收人**：{cfg['name'] or '未命名'}\n"
+            "- **说明**：收到这条说明告警推送配置正确。\n"
+        )
+        return notify.ServerChanChannel(sendkey).send(title, desp)
+
+    @app.post("/api/notify/reset")
+    def notify_reset() -> dict[str, Any]:
+        return {"ok": True, "cleared": db.clear_notifications()}
 
     @app.get("/api/settings")
     def settings() -> dict[str, Any]:

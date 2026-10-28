@@ -78,6 +78,20 @@ def init_db() -> None:
                 handled_count INTEGER NOT NULL DEFAULT 0,
                 total_count INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS notify_daily (
+                day TEXT PRIMARY KEY,
+                count INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS alarm_notifications (
+                camera_id INTEGER PRIMARY KEY,
+                alarm_id INTEGER NOT NULL,
+                alarm_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                ok INTEGER NOT NULL DEFAULT 0,
+                code INTEGER,
+                message TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
             """
         )
         for k, v in {
@@ -91,6 +105,10 @@ def init_db() -> None:
             "tile_interval": "2",
             "verify_enabled": "1",
             "verify_threshold": "0.25",
+            "notify_enabled": "0",
+            "notify_sendkey": "",
+            "notify_name": "",
+            "notify_daily_limit": "5",
         }.items():
             c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (k, v))
         current = {r["key"]: r["value"] for r in c.execute("SELECT * FROM settings").fetchall()}
@@ -104,6 +122,14 @@ def init_db() -> None:
             c.execute("ALTER TABLE alarms ADD COLUMN updated_at TEXT")
         if "verified" not in columns:
             c.execute("ALTER TABLE alarms ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
+        for column, decl in (
+            ("snapshot_first", "TEXT"),
+            ("snapshot_latest", "TEXT"),
+            ("boxes", "TEXT"),
+            ("frame_size", "TEXT"),
+        ):
+            if column not in columns:
+                c.execute(f"ALTER TABLE alarms ADD COLUMN {column} {decl}")
 
 
 def insert_camera(name: str, source_type: str, source: str, location: str = "", loop: int = 1) -> int:
@@ -174,7 +200,7 @@ def create_alarm(
                     "verified": 1 if verified or exist["verified"] else 0,
                 }
             )
-            return merged
+            return {**merged, "is_new": False}
         cur = c.execute(
             "INSERT INTO alarms(camera_id,camera_name,alarm_type,level,confidence,created_at,status,count,verified,updated_at)"
             " VALUES(?,?,?,?,?,?,'unhandled',1,?,?)",
@@ -193,6 +219,7 @@ def create_alarm(
             "count": 1,
             "verified": 1 if verified else 0,
             "status": "unhandled",
+            "is_new": True,
         }
 
 
@@ -201,10 +228,121 @@ def list_alarms(limit: int = 100) -> list[dict[str, Any]]:
         return [dict(r) for r in c.execute("SELECT * FROM alarms ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
 
 
-def clear_alarms() -> int:
+def get_alarm(alarm_id: int) -> dict[str, Any] | None:
     with _conn() as c:
-        cur = c.execute("DELETE FROM alarms")
-        return cur.rowcount
+        row = c.execute("SELECT * FROM alarms WHERE id=?", (alarm_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def update_alarm_snapshot(
+    alarm_id: int,
+    *,
+    first: str | None = None,
+    latest: str | None = None,
+    boxes: str | None = None,
+    frame_size: str | None = None,
+) -> None:
+    """写入告警画面信息；first 只在新建告警时传，latest 每次合并都覆盖。"""
+    sets: list[str] = []
+    params: list[Any] = []
+    if first:
+        sets.append("snapshot_first=?")
+        params.append(first)
+    if latest:
+        sets.append("snapshot_latest=?")
+        params.append(latest)
+    if boxes is not None:
+        sets.append("boxes=?")
+        params.append(boxes)
+    if frame_size is not None:
+        sets.append("frame_size=?")
+        params.append(frame_size)
+    if not sets:
+        return
+    params.append(alarm_id)
+    with _conn() as c:
+        c.execute(f"UPDATE alarms SET {', '.join(sets)} WHERE id=?", params)
+
+
+def clear_alarms() -> list[dict[str, Any]]:
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute("SELECT id, camera_id FROM alarms").fetchall()]
+        c.execute("DELETE FROM alarms")
+        return rows
+
+
+def reserve_notification(camera_id: int, alarm_id: int, alarm_type: str, title: str) -> bool:
+    """原子占位：该视频源本轮尚未推送过才返回 True。"""
+    with _conn() as c:
+        cur = c.execute(
+            "INSERT OR IGNORE INTO alarm_notifications"
+            "(camera_id,alarm_id,alarm_type,title,ok,created_at) VALUES(?,?,?,?,0,?)",
+            (camera_id, alarm_id, alarm_type, title, now_text()),
+        )
+        return cur.rowcount > 0
+
+
+def finish_notification(camera_id: int, ok: bool, code: int | None, message: str) -> None:
+    with _conn() as c:
+        c.execute(
+            "UPDATE alarm_notifications SET ok=?, code=?, message=? WHERE camera_id=?",
+            (1 if ok else 0, code, (message or "")[:500], camera_id),
+        )
+
+
+def list_notifications() -> list[dict[str, Any]]:
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM alarm_notifications ORDER BY created_at DESC"
+        ).fetchall()]
+
+
+def clear_notifications() -> int:
+    with _conn() as c:
+        return c.execute("DELETE FROM alarm_notifications").rowcount
+
+
+def bump_notify_daily() -> None:
+    """每尝试推送一次就 +1；写在独立表里，重启清空 alarm_notifications 也不会归零。"""
+    with _conn() as c:
+        c.execute(
+            """
+            INSERT INTO notify_daily(day, count) VALUES(?, 1)
+            ON CONFLICT(day) DO UPDATE SET count=count+1
+            """,
+            (now_text()[:10],),
+        )
+
+
+def notifications_sent_today() -> int:
+    """今天已尝试推送的条数；读持久计数，重启不清零。"""
+    with _conn() as c:
+        row = c.execute("SELECT count FROM notify_daily WHERE day=?", (now_text()[:10],)).fetchone()
+    return int(row["count"]) if row else 0
+
+
+def get_notify_config() -> dict[str, Any]:
+    with _conn() as c:
+        rows = {r["key"]: r["value"] for r in c.execute(
+            "SELECT * FROM settings WHERE key LIKE 'notify_%'"
+        ).fetchall()}
+    return {
+        "enabled": 1 if rows.get("notify_enabled", "0") == "1" else 0,
+        "sendkey": rows.get("notify_sendkey", ""),
+        "name": rows.get("notify_name", ""),
+        "daily_limit": int(rows.get("notify_daily_limit", "5") or 5),
+    }
+
+
+def save_notify_config(enabled: int, sendkey: str, name: str, daily_limit: int) -> None:
+    with _conn() as c:
+        for key, value in (
+            ("notify_enabled", "1" if enabled else "0"),
+            ("notify_sendkey", sendkey),
+            ("notify_name", name),
+            ("notify_daily_limit", str(daily_limit)),
+        ):
+            c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)", (key, value))
 
 
 def ack_alarm(alarm_id: int) -> bool:

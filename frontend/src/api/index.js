@@ -45,14 +45,20 @@ export const api = {
   },
   alarms: (limit = 200) => request(`/api/alarms?limit=${limit}`),
   clearAlarms: () => request('/api/alarms', { method: 'DELETE' }),
+  alarmDetail: (id) => request(`/api/alarms/${id}`),
   modelInfo: () => request('/api/model'),
   agents: () => request('/api/agents'),
   ackAlarm: (id) => request(`/api/alarms/${id}/ack`, { method: 'POST' }),
   ackAlarmGroup: (payload) => request('/api/alarms/ack_group', { method: 'POST', body: JSON.stringify(payload) }),
   dashboard: () => request('/api/dashboard'),
   settings: () => request('/api/settings'),
-  saveSettings: (payload) => request('/api/settings', { method: 'PUT', body: JSON.stringify(payload) })
+  saveSettings: (payload) => request('/api/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  notifyConfig: () => request('/api/notify'),
+  saveNotify: (payload) => request('/api/notify', { method: 'PUT', body: JSON.stringify(payload) }),
+  testNotify: (payload = {}) => request('/api/notify/test', { method: 'POST', body: JSON.stringify(payload) }),
+  resetNotify: () => request('/api/notify/reset', { method: 'POST' })
 }
 
 export const streamUrl = (cameraId, annotated = true) => `/stream/${cameraId}${annotated ? '' : '?annotated=false'}`
 export const snapshotUrl = (cameraId, annotated = true) => `/snapshot/${cameraId}?annotated=${annotated ? 'true' : 'false'}`
+export const alarmFrameUrl = (alarmId, variant = 'first') => `/api/alarms/${alarmId}/frame?variant=${variant}`
