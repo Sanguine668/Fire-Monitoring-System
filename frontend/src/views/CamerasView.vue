@@ -11,10 +11,125 @@ const addVisible = ref(false)
 const previewVisible = ref(false)
 const previewCamera = ref(null)
 const previewAnnotated = ref(true)
+const geometryVisible = ref(false)
+const geometryCamera = ref(null)
+const geometrySaving = ref(false)
 const keyword = ref('')
 const busyId = ref(null)
 const alertsBusyId = ref(null)
 const form = reactive({ name: '', location: '', source_type: 'http', source: '', loop: true })
+const geometryForm = reactive({ install_height_m: null, pitch_deg: null, hfov_deg: null })
+
+function hasGeometry(camera) {
+  return (
+    camera.install_height_m !== null && camera.install_height_m !== undefined
+  ) || (
+    camera.pitch_deg !== null && camera.pitch_deg !== undefined
+  ) || (
+    camera.hfov_deg !== null && camera.hfov_deg !== undefined
+  )
+}
+
+function geometrySummary(camera) {
+  if (!hasGeometry(camera)) return ''
+  const height = camera.install_height_m === null || camera.install_height_m === undefined
+    ? '高度默认'
+    : `${camera.install_height_m} m`
+  const pitch = camera.pitch_deg === null || camera.pitch_deg === undefined
+    ? '俯角默认'
+    : `${camera.pitch_deg}°`
+  const hfov = camera.hfov_deg === null || camera.hfov_deg === undefined
+    ? '视场角默认'
+    : `${camera.hfov_deg}°`
+  return `${height} / ${pitch} / ${hfov}`
+}
+
+function openGeometry(camera) {
+  geometryCamera.value = camera
+  geometryForm.install_height_m = camera.install_height_m ?? null
+  geometryForm.pitch_deg = camera.pitch_deg ?? null
+  geometryForm.hfov_deg = camera.hfov_deg ?? null
+  geometryVisible.value = true
+}
+
+async function putGeometry(payload) {
+  const cameraId = geometryCamera.value?.id
+  if (!cameraId) return null
+  const response = await fetch(`/api/cameras/${cameraId}/geometry`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`
+    try {
+      const data = await response.json()
+      if (typeof data.detail === 'string') detail = data.detail
+    } catch {
+      /* 保留默认错误信息 */
+    }
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+function geometryPayload() {
+  const value = (input) => (input === null || input === undefined ? null : Number(input))
+  return {
+    install_height_m: value(geometryForm.install_height_m),
+    pitch_deg: value(geometryForm.pitch_deg),
+    hfov_deg: value(geometryForm.hfov_deg)
+  }
+}
+
+function geometryValid(payload) {
+  const limits = [
+    ['安装高度', payload.install_height_m, 0.5, 100],
+    ['俯角', payload.pitch_deg, 0, 89],
+    ['视场角', payload.hfov_deg, 10, 120]
+  ]
+  for (const [label, value, min, max] of limits) {
+    if (value === null) continue
+    if (!Number.isFinite(value) || value < min || value > max) {
+      ElMessage.warning(`${label}需在 ${min}–${max} 之间（留空则使用默认值）`)
+      return false
+    }
+  }
+  return true
+}
+
+async function saveGeometry() {
+  if (geometrySaving.value || !geometryCamera.value) return
+  const payload = geometryPayload()
+  if (!geometryValid(payload)) return
+  geometrySaving.value = true
+  try {
+    await putGeometry(payload)
+    ElMessage.success('安装参数已保存，后续检测将按新参数估算距离')
+    geometryVisible.value = false
+    await load()
+  } catch (error) {
+    ElMessage.error(`保存安装参数失败：${error.message}`)
+  } finally {
+    geometrySaving.value = false
+  }
+}
+
+async function clearGeometry() {
+  if (geometrySaving.value || !geometryCamera.value) return
+  geometrySaving.value = true
+  try {
+    await putGeometry({ install_height_m: null, pitch_deg: null, hfov_deg: null })
+    Object.assign(geometryForm, { install_height_m: null, pitch_deg: null, hfov_deg: null })
+    ElMessage.success('已清除安装参数，将使用默认参数估算')
+    geometryVisible.value = false
+    await load()
+  } catch (error) {
+    ElMessage.error(`清除安装参数失败：${error.message}`)
+  } finally {
+    geometrySaving.value = false
+  }
+}
 
 const filteredCameras = computed(() => {
   const key = keyword.value.trim().toLowerCase()
@@ -160,6 +275,13 @@ onMounted(load)
           />
         </template>
       </el-table-column>
+      <el-table-column label="安装参数" width="240">
+        <template #default="{ row }">
+          <el-button size="small" link type="primary" @click="openGeometry(row)">
+            {{ hasGeometry(row) ? geometrySummary(row) : '未设置（用默认参数）' }}
+          </el-button>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="240">
         <template #default="{ row }">
           <el-button size="small" @click="preview(row)">预览</el-button>
@@ -202,6 +324,63 @@ onMounted(load)
       </template>
     </el-dialog>
 
+    <el-dialog
+      v-model="geometryVisible"
+      :title="geometryCamera ? `安装参数：${geometryCamera.name}` : '安装参数'"
+      width="440px"
+    >
+      <el-form label-width="110px">
+        <el-form-item label="安装高度 (m)">
+          <el-input-number
+            v-model="geometryForm.install_height_m"
+            :min="0.5"
+            :max="100"
+            :step="0.5"
+            :precision="1"
+            :value-on-clear="null"
+            controls-position="right"
+            placeholder="默认 20"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="俯角 (°)">
+          <el-input-number
+            v-model="geometryForm.pitch_deg"
+            :min="0"
+            :max="89"
+            :step="1"
+            :precision="1"
+            :value-on-clear="null"
+            controls-position="right"
+            placeholder="默认 10"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="视场角 (°)">
+          <el-input-number
+            v-model="geometryForm.hfov_deg"
+            :min="10"
+            :max="120"
+            :step="1"
+            :precision="1"
+            :value-on-clear="null"
+            controls-position="right"
+            placeholder="默认 20"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <p class="geometry-note">
+        留空或点「清除」将按默认远景机位参数估算（20 m 高 / 10° 俯角 / 20° 视场角），误差约 ±40%。
+        距离仅供参考，不代表实测值。
+      </p>
+      <template #footer>
+        <el-button @click="geometryVisible = false">取消</el-button>
+        <el-button :loading="geometrySaving" @click="clearGeometry">清除</el-button>
+        <el-button type="primary" :loading="geometrySaving" @click="saveGeometry">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="previewVisible" :title="previewCamera ? `预览：${previewCamera.name}` : '预览'" width="760px">
       <div class="preview-tools">
         <el-switch v-model="previewAnnotated" active-text="显示检测框" inactive-text="原始画面" />
@@ -221,4 +400,5 @@ onMounted(load)
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .hint { color: #9aa2b0; font-size: 0.875rem; }
 .preview-tools { margin-bottom: 10px; }
+.geometry-note { margin: 0; color: #9aa2b0; font-size: 0.75rem; line-height: 1.6; }
 </style>

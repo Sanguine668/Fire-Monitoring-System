@@ -107,4 +107,7 @@ def draw_detections(frame, detections: list[dict[str, Any]]) -> None:
         color = (0, 0, 255) if d["type"] == "fire" else (0, 165, 255)
         cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
         label = f"{d['type']} {d['confidence']:.2f}"
+        distance = d.get("distance")
+        if isinstance(distance, dict) and distance.get("meters") is not None:
+            label += f" · {distance['meters']}m"
         cv2.putText(frame, label, (x, max(0, y - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)

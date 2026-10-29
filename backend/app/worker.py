@@ -11,6 +11,7 @@ from . import alarm_store, db
 from .alarm_engine import AlarmEngine
 from .config import DEFAULT_FPS, FRAME_QUALITY
 from .detector import draw_detections
+from .distance import estimate_distance
 from .events import WsManager
 from .sources import is_network_source, open_capture
 from .tiling import merge_detections
@@ -236,11 +237,34 @@ class DetectionWorker(threading.Thread):
                             alarm["verified"] = True
                             alarm["verify_confidence"] = round(verify_conf, 3)
                     verification_state["history"] = dict(self._verify_stats)
+                visible = [
+                    d
+                    for d in objects
+                    if (d["type"] == "fire" and d["confidence"] >= float(s["fire_threshold"]))
+                    or (d["type"] == "smoke" and d["confidence"] >= float(s["smoke_threshold"]))
+                ]
+                # 安装参数每次从 DB 行读取；API 改完后 Worker 无需重启即可生效。
+                geometry = {
+                    "install_height_m": self.camera.get("install_height_m"),
+                    "pitch_deg": self.camera.get("pitch_deg"),
+                    "hfov_deg": self.camera.get("hfov_deg"),
+                }
+                for d in visible:
+                    d["distance"] = estimate_distance(
+                        d["bbox"], frame.shape[1], frame.shape[0], geometry
+                    )
+                nearest = min(
+                    visible,
+                    key=lambda d: d["distance"]["meters"],
+                    default=None,
+                )
                 trace = {
                     "perception": {
                         "active": True,
                         "objects": len(objects),
                         "top_confidence": round(max((d["confidence"] for d in objects), default=0.0), 3),
+                        "nearest_m": nearest["distance"]["meters"] if nearest else None,
+                        "nearest_band": nearest["distance"]["band"] if nearest else None,
                     },
                     "farfield": {
                         "active": use_tiling,
@@ -265,12 +289,6 @@ class DetectionWorker(threading.Thread):
                 ok_raw, raw_buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), FRAME_QUALITY])
                 if ok_raw:
                     self.latest_raw_jpeg = raw_buf.tobytes()
-                visible = [
-                    d
-                    for d in objects
-                    if (d["type"] == "fire" and d["confidence"] >= float(s["fire_threshold"]))
-                    or (d["type"] == "smoke" and d["confidence"] >= float(s["smoke_threshold"]))
-                ]
                 draw_detections(frame, visible)
                 ok_jpeg, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), FRAME_QUALITY])
                 if ok_jpeg:

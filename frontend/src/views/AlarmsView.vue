@@ -224,6 +224,29 @@ const frameEmptyText = computed(() => {
   return hasAnyFrame.value ? '画面读取失败（文件可能已被清理）' : '该告警产生于功能上线前，无画面留存'
 })
 
+const nearestDistanceBox = computed(() => {
+  const boxes = (detailBoxes.value || []).filter(
+    (item) => item && item.distance && Number.isFinite(Number(item.distance.meters))
+  )
+  if (boxes.length === 0) return null
+  return boxes.reduce((nearest, item) =>
+    Number(item.distance.meters) < Number(nearest.distance.meters) ? item : nearest
+  )
+})
+
+const distanceSummary = computed(() => {
+  const box = nearestDistanceBox.value
+  if (!box) return ''
+  const d = box.distance
+  return `约 ${Number(d.meters)} m · ${d.band || '—'}（目标高 ${Number(d.size_px)} px）`
+})
+
+const distanceNote = computed(() =>
+  nearestDistanceBox.value?.distance?.method === 'geometry'
+    ? '按视频源安装参数进行几何估算，误差约 ±40%，可在视频源管理中修改'
+    : '按默认安装参数估算（20 m 高 / 10° 俯角 / 20° 视场角），误差约 ±40%，可在视频源管理中修改'
+)
+
 function switchVariant(value) {
   frameVariant.value = value
   frameError.value = false
@@ -559,6 +582,12 @@ onUnmounted(() => {
         <div v-else class="frame-empty">
           {{ frameEmptyText }}
         </div>
+        <div class="distance-line">
+          <span class="distance-label">估计距离：</span>
+          <b v-if="nearestDistanceBox">{{ distanceSummary }}</b>
+          <span v-else class="muted">未记录</span>
+        </div>
+        <div v-if="nearestDistanceBox" class="distance-note">{{ distanceNote }}</div>
         <div v-if="detailBoxes.length" class="box-list">
           <div class="box-title">检测结果（{{ detailBoxes.length }}）</div>
           <div v-for="(item, index) in detailBoxes" :key="index" class="box-row">
@@ -622,6 +651,9 @@ onUnmounted(() => {
   height: 8rem; display: flex; align-items: center; justify-content: center;
   background: #f3f5f8; color: #9aa2b0; border-radius: 6px; font-size: 0.875rem; text-align: center; padding: 0 1rem;
 }
+.distance-line { margin-top: 0.625rem; font-size: 0.9375rem; color: #1f2d3d; }
+.distance-label { color: #7b8494; }
+.distance-note { margin-top: 0.25rem; color: #9aa2b0; font-size: 0.75rem; line-height: 1.5; }
 .box-list { margin-top: 0.75rem; }
 .box-title { font-size: 0.875rem; color: #4b5563; margin-bottom: 0.375rem; }
 .box-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; font-size: 0.875rem; }

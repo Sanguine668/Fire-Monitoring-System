@@ -33,6 +33,14 @@ class CameraCreate(BaseModel):
     loop: bool = True
 
 
+class CameraGeometryPayload(BaseModel):
+    """安装参数全部可空；传 null 表示清除并使用默认参数。"""
+
+    install_height_m: float | None = Field(default=None, ge=0.5, le=100)
+    pitch_deg: float | None = Field(default=None, ge=0, le=89)
+    hfov_deg: float | None = Field(default=None, ge=10, le=120)
+
+
 class SettingsPayload(BaseModel):
     fire_threshold: float = Field(ge=0.1, le=0.99)
     smoke_threshold: float = Field(ge=0.1, le=0.99)
@@ -316,6 +324,30 @@ def create_app() -> FastAPI:
         enabled = not bool(camera["alerts_enabled"])
         db.set_camera_alerts(camera_id, enabled)
         return {"id": camera_id, "alerts_enabled": 1 if enabled else 0}
+
+    @app.put("/api/cameras/{camera_id}/geometry")
+    def set_geometry(
+        camera_id: int,
+        payload: CameraGeometryPayload,
+        reg: CameraRegistry = Depends(registry),
+    ) -> dict[str, Any]:
+        """保存/清除相机安装参数；运行中的 Worker 立即用新参数估算距离。"""
+        if not db.get_camera(camera_id):
+            raise HTTPException(404, "camera not found")
+        db.set_camera_geometry(camera_id, payload.install_height_m, payload.pitch_deg, payload.hfov_deg)
+        camera = db.get_camera(camera_id)
+        if camera is None:  # 并发删除
+            raise HTTPException(404, "camera not found")
+        worker = reg.workers.get(camera_id)
+        if worker is not None:
+            worker.camera.update(
+                {
+                    "install_height_m": camera["install_height_m"],
+                    "pitch_deg": camera["pitch_deg"],
+                    "hfov_deg": camera["hfov_deg"],
+                }
+            )
+        return camera
 
     @app.delete("/api/cameras/{camera_id}")
     def delete(camera_id: int, reg: CameraRegistry = Depends(registry)) -> dict[str, Any]:

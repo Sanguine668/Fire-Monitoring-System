@@ -121,7 +121,8 @@ function agentDoing(key, t) {
   if (key === 'perception') {
     const p = t.perception
     if (!p.active) return '感知已停止 · 等待画面恢复'
-    return `整图检测 · 检出 ${p.objects} 个候选（最高置信度 ${Number(p.top_confidence ?? 0).toFixed(2)}）`
+    const nearest = p.nearest_m === null || p.nearest_m === undefined ? '' : ` · 最近 约 ${Number(p.nearest_m)} m`
+    return `整图检测 · 检出 ${p.objects} 个候选（最高置信度 ${Number(p.top_confidence ?? 0).toFixed(2)}）${nearest}`
   }
   if (key === 'farfield') {
     const f = t.farfield

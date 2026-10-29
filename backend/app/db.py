@@ -134,6 +134,13 @@ def init_db() -> None:
         camera_columns = {r["name"] for r in c.execute("PRAGMA table_info(cameras)").fetchall()}
         if "alerts_enabled" not in camera_columns:
             c.execute("ALTER TABLE cameras ADD COLUMN alerts_enabled INTEGER NOT NULL DEFAULT 1")
+        for column, decl in (
+            ("install_height_m", "REAL"),
+            ("pitch_deg", "REAL"),
+            ("hfov_deg", "REAL"),
+        ):
+            if column not in camera_columns:
+                c.execute(f"ALTER TABLE cameras ADD COLUMN {column} {decl}")
 
 
 def insert_camera(name: str, source_type: str, source: str, location: str = "", loop: int = 1) -> int:
@@ -165,6 +172,20 @@ def set_camera_enabled(camera_id: int, enabled: bool) -> None:
 def set_camera_alerts(camera_id: int, enabled: bool) -> None:
     with _conn() as c:
         c.execute("UPDATE cameras SET alerts_enabled=? WHERE id=?", (1 if enabled else 0, camera_id))
+
+
+def set_camera_geometry(
+    camera_id: int,
+    install_height_m: float | None,
+    pitch_deg: float | None,
+    hfov_deg: float | None,
+) -> None:
+    """写入相机安装参数；传 None 表示清除，检测端会回落到默认值。"""
+    with _conn() as c:
+        c.execute(
+            "UPDATE cameras SET install_height_m=?, pitch_deg=?, hfov_deg=? WHERE id=?",
+            (install_height_m, pitch_deg, hfov_deg, camera_id),
+        )
 
 
 def set_camera_online(camera_id: int, online: bool) -> None:
