@@ -5,7 +5,7 @@ import { api } from '../api'
 
 const defaults = {
   fire_threshold: 0.4,
-  smoke_threshold: 0.45,
+  smoke_threshold: 0.25,
   continuous_frames: 3,
   alarm_cooldown: 8,
   tiling_enabled: 1,

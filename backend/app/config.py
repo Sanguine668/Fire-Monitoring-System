@@ -11,6 +11,9 @@ FRONTEND_DIST = ROOT / "frontend" / "dist"
 
 DB_PATH = Path(os.environ.get("FIREGUARD_DB", str(STORAGE / "fireguard.db")))
 _MODEL_CANDIDATES = [
+    # 远景重训版本（实验室 2×3090 上训练）：远景烟雾图级召回 71.4% → 90.1%，精确率 74.4% → 82.5%
+    ROOT / "weights" / "fire26n-v2-far.pt",
+    # 出厂版本：新权重缺失时自动回退，保证系统永远能启动
     ROOT / "weights" / "fire26n-v2-best.pt",
     ROOT / "ai" / "runs" / "fire26n-v2" / "weights" / "best.pt",
 ]

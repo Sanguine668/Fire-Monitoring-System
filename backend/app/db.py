@@ -97,7 +97,7 @@ def init_db() -> None:
         )
         for k, v in {
             "fire_threshold": "0.40",
-            "smoke_threshold": "0.45",
+            "smoke_threshold": "0.25",
             "continuous_frames": "3",
             "alarm_cooldown": "8",
             "tiling_enabled": "1",
