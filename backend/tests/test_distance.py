@@ -78,17 +78,22 @@ def test_horizon_falls_back_to_size_method() -> None:
     assert result["meters"] == _size_estimate(FRAME_W, 40) == 3400
 
 
+TOWER_GEOMETRY = {"install_height_m": 20.0, "pitch_deg": 10.0, "hfov_deg": 20.0}
+
+
 def test_ground_distance_is_used_when_trustworthy() -> None:
-    # 20 m 塔杆、10° 俯角下，画面 80% 处的 120 px 目标应走地面法，约 84 m。
-    result = estimate_distance([800, 744, 240, 120], FRAME_W, FRAME_H, None)
+    # 20 m 塔杆、10° 俯角、20° 视场角：画面 80% 处的 120 px 目标走地面法，约 84 m。
+    result = estimate_distance([800, 744, 240, 120], FRAME_W, FRAME_H, TOWER_GEOMETRY)
+    assert result["method"] == "geometry"
     assert 2 <= result["meters"] <= 300
     assert 70 <= result["meters"] <= 100
 
 
-def test_ground_beyond_300m_falls_back_to_size_method() -> None:
-    # pitch=0，框底刚到中心下方约 100 px：地面法 >300 m，改用尺寸法。
-    result = estimate_distance([900, 560, 100, 80], FRAME_W, FRAME_H, LONG_RANGE_GEOMETRY)
-    assert result["meters"] == _size_estimate(FRAME_W, 80) == 1700
+def test_horizon_rule_falls_back_to_size_method() -> None:
+    # 框底贴近画面中心（pitch+theta <= 1°）时地面法失效，改用尺寸法。
+    # 框底 600 px（中心下方 60 px ≈ 0.63°），theta 与 pitch 之和 <= 1°。
+    result = estimate_distance([900, 520, 100, 80], FRAME_W, FRAME_H, LONG_RANGE_GEOMETRY)
+    assert result["meters"] == _size_estimate(FRAME_W, 80)
 
 
 def test_size_method_is_monotonic_with_box_height_at_horizon() -> None:
@@ -112,7 +117,7 @@ def test_clamping_to_min_and_max() -> None:
 def test_rounding_below_100m_is_whole_metres_above_is_tens() -> None:
     # 尺寸法 1701.4 m -> 1700；地面法约 83.8 m -> 84。
     horizon = estimate_distance([900, 0, 100, 80], FRAME_W, FRAME_H, LONG_RANGE_GEOMETRY)
-    ground = estimate_distance([800, 744, 240, 120], FRAME_W, FRAME_H, None)
+    ground = estimate_distance([800, 744, 240, 120], FRAME_W, FRAME_H, TOWER_GEOMETRY)
     assert horizon["meters"] == 1700
     assert ground["meters"] % 10 != 0 or ground["meters"] < 100
     assert ground["meters"] == round(ground["meters"])
