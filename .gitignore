@@ -48,3 +48,10 @@ docs/课程任务/数据集预览/
 往期作业参考/**/*.doc
 往期作业参考/**/*.docx
 往期作业参考/**/*.txt
+
+# ── 训练交付包与运行数据（体积大 / 含本机密钥，绝不入库） ──
+training_bundle/
+training_bundle.zip
+training_data_*.tar
+storage/
+!weights/fire26n-v2-far.pt
