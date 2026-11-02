@@ -2,8 +2,11 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
 async function request(url, options = {}) {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 12000)
-  const opts = { ...options, signal: controller.signal }
+  // 默认 12 秒；上传大视频等耗时请求可传 timeout 覆盖
+  const timeoutMs = options.timeout ?? 12000
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const { timeout: _ignored, ...rest } = options
+  const opts = { ...rest, signal: controller.signal }
   if (opts.body && typeof opts.body === 'string' && !opts.headers) {
     opts.headers = JSON_HEADERS
   }
@@ -22,7 +25,7 @@ async function request(url, options = {}) {
     const type = res.headers.get('content-type') || ''
     return type.includes('application/json') ? res.json() : res.text()
   } catch (error) {
-    if (error.name === 'AbortError') throw new Error('请求超时，请检查后端是否在线')
+    if (error.name === 'AbortError') throw new Error('请求超时，请检查后端是否在线或视频是否过大')
     throw error
   } finally {
     clearTimeout(timer)
@@ -42,7 +45,8 @@ export const api = {
   uploadVideo: (file) => {
     const form = new FormData()
     form.append('file', file)
-    return request('/api/uploads', { method: 'POST', body: form })
+    // 视频上传耗时，单独放宽到 5 分钟
+    return request('/api/uploads', { method: 'POST', body: form, timeout: 300000 })
   },
   alarms: (limit = 200) => request(`/api/alarms?limit=${limit}`),
   clearAlarms: () => request('/api/alarms', { method: 'DELETE' }),

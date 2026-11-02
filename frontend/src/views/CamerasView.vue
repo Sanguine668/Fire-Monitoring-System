@@ -7,6 +7,7 @@ import { api, streamUrl } from '../api'
 const cameras = ref([])
 const loading = ref(false)
 const uploadVisible = ref(false)
+const uploading = ref(false)
 const addVisible = ref(false)
 const previewVisible = ref(false)
 const previewCamera = ref(null)
@@ -154,14 +155,28 @@ async function load() {
 }
 
 async function uploadFile({ file }) {
+  if (!file) return
+  if (!/\.(mp4|mov)$/i.test(file.name || '')) {
+    ElMessage.error('仅支持 MP4 / MOV 格式')
+    return
+  }
+  uploading.value = true
   try {
     await api.uploadVideo(file)
-    ElMessage.success('上传成功，已加入视频源列表')
+    ElMessage.success(`上传成功：${file.name}，已加入视频源列表`)
     uploadVisible.value = false
     await load()
   } catch (error) {
-    ElMessage.error(`上传失败：${error.message}（请确认后端已启动）`)
+    ElMessage.error(`上传失败：${error.message}`)
+  } finally {
+    uploading.value = false
   }
+}
+
+function onExceed(files) {
+  // 只允许一次传一个：替换掉已选文件后立即上传
+  if (!files || !files.length) return
+  uploadFile({ file: files[0] })
 }
 
 async function submitCamera() {
@@ -292,13 +307,21 @@ onMounted(load)
     </el-table>
 
     <el-dialog v-model="uploadVisible" title="上传本地视频（自动循环检测）" width="520px">
-      <el-upload drag :auto-upload="false" :show-file-list="true" accept=".mp4,.mov" :http-request="uploadFile">
+      <el-upload
+        drag
+        :show-file-list="true"
+        :limit="1"
+        accept=".mp4,.mov"
+        :disabled="uploading"
+        :http-request="uploadFile"
+        :on-exceed="onExceed"
+      >
         <el-icon size="36"><Upload /></el-icon>
-        <div>将 MP4/MOV 拖到此处，或点击选择文件</div>
+        <div>{{ uploading ? '正在上传，请稍候…' : '将 MP4/MOV 拖到此处，或点击选择文件' }}</div>
       </el-upload>
       <template #footer>
-        <span class="hint">上传后系统会自动创建视频源并开始检测</span>
-        <el-button @click="uploadVisible = false">关闭</el-button>
+        <span class="hint">{{ uploading ? '上传中，请勿关闭…' : '选择文件后立即上传，系统会自动创建视频源并开始检测' }}</span>
+        <el-button :disabled="uploading" @click="uploadVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 
