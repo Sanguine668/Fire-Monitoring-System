@@ -19,10 +19,31 @@ const keyword = ref('')
 const busyId = ref(null)
 const alertsBusyId = ref(null)
 const form = reactive({ name: '', location: '', source_type: 'http', source: '', loop: true })
-const geometryForm = reactive({ install_height_m: null, pitch_deg: null, hfov_deg: null })
+const geometryForm = reactive({
+  preset: 'phone_handheld',
+  install_height_m: null,
+  pitch_deg: null,
+  hfov_deg: null
+})
+
+// 设备预设：(安装高度 m, 俯角 °, 视场角 °)。custom 表示只认输入框里的数值。
+const GEOMETRY_PRESETS = {
+  phone_handheld: { label: '手机手持', values: { install_height_m: 1.5, pitch_deg: 12, hfov_deg: 66 } },
+  phone_mounted: { label: '手机固定', values: { install_height_m: 1.5, pitch_deg: 5, hfov_deg: 66 } },
+  tower_telephoto: { label: '塔杆长焦', values: { install_height_m: 20, pitch_deg: 5, hfov_deg: 20 } },
+  custom: { label: '自定义', values: null }
+}
+const geometryPresetOptions = Object.entries(GEOMETRY_PRESETS).map(([value, item]) => ({
+  value,
+  label: item.label
+}))
+
+function presetLabel(preset) {
+  return GEOMETRY_PRESETS[preset]?.label || ''
+}
 
 function hasGeometry(camera) {
-  return (
+  return Boolean(camera.geometry_preset) || (
     camera.install_height_m !== null && camera.install_height_m !== undefined
   ) || (
     camera.pitch_deg !== null && camera.pitch_deg !== undefined
@@ -42,14 +63,23 @@ function geometrySummary(camera) {
   const hfov = camera.hfov_deg === null || camera.hfov_deg === undefined
     ? '视场角默认'
     : `${camera.hfov_deg}°`
-  return `${height} / ${pitch} / ${hfov}`
+  const preset = presetLabel(camera.geometry_preset)
+  return `${preset ? `${preset} ` : ''}${height} / ${pitch} / ${hfov}`
+}
+
+function applyGeometryPreset(preset) {
+  const values = GEOMETRY_PRESETS[preset]?.values
+  if (!values) return
+  Object.assign(geometryForm, values)
 }
 
 function openGeometry(camera) {
   geometryCamera.value = camera
+  geometryForm.preset = camera.geometry_preset || (hasGeometry(camera) ? 'custom' : 'phone_handheld')
   geometryForm.install_height_m = camera.install_height_m ?? null
   geometryForm.pitch_deg = camera.pitch_deg ?? null
   geometryForm.hfov_deg = camera.hfov_deg ?? null
+  if (!hasGeometry(camera)) applyGeometryPreset('phone_handheld')
   geometryVisible.value = true
 }
 
@@ -77,6 +107,7 @@ async function putGeometry(payload) {
 function geometryPayload() {
   const value = (input) => (input === null || input === undefined ? null : Number(input))
   return {
+    preset: geometryForm.preset || null,
     install_height_m: value(geometryForm.install_height_m),
     pitch_deg: value(geometryForm.pitch_deg),
     hfov_deg: value(geometryForm.hfov_deg)
@@ -120,9 +151,14 @@ async function clearGeometry() {
   if (geometrySaving.value || !geometryCamera.value) return
   geometrySaving.value = true
   try {
-    await putGeometry({ install_height_m: null, pitch_deg: null, hfov_deg: null })
-    Object.assign(geometryForm, { install_height_m: null, pitch_deg: null, hfov_deg: null })
-    ElMessage.success('已清除安装参数，将使用默认参数估算')
+    await putGeometry({ preset: null, install_height_m: null, pitch_deg: null, hfov_deg: null })
+    Object.assign(geometryForm, {
+      preset: null,
+      install_height_m: null,
+      pitch_deg: null,
+      hfov_deg: null
+    })
+    ElMessage.success('已清除安装参数，将按手机手持默认参数估算')
     geometryVisible.value = false
     await load()
   } catch (error) {
@@ -290,10 +326,10 @@ onMounted(load)
           />
         </template>
       </el-table-column>
-      <el-table-column label="安装参数" width="240">
+      <el-table-column label="安装参数" width="260">
         <template #default="{ row }">
           <el-button size="small" link type="primary" @click="openGeometry(row)">
-            {{ hasGeometry(row) ? geometrySummary(row) : '未设置（用默认参数）' }}
+            {{ hasGeometry(row) ? geometrySummary(row) : '未设置（手机手持默认）' }}
           </el-button>
         </template>
       </el-table-column>
@@ -353,6 +389,21 @@ onMounted(load)
       width="440px"
     >
       <el-form label-width="110px">
+        <el-form-item label="设备预设">
+          <el-select
+            v-model="geometryForm.preset"
+            placeholder="手机手持"
+            style="width: 100%"
+            @change="applyGeometryPreset"
+          >
+            <el-option
+              v-for="item in geometryPresetOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="安装高度 (m)">
           <el-input-number
             v-model="geometryForm.install_height_m"
@@ -362,7 +413,7 @@ onMounted(load)
             :precision="1"
             :value-on-clear="null"
             controls-position="right"
-            placeholder="默认 20"
+            placeholder="默认 1.5"
             style="width: 100%"
           />
         </el-form-item>
@@ -375,7 +426,7 @@ onMounted(load)
             :precision="1"
             :value-on-clear="null"
             controls-position="right"
-            placeholder="默认 10"
+            placeholder="默认 12"
             style="width: 100%"
           />
         </el-form-item>
@@ -388,14 +439,14 @@ onMounted(load)
             :precision="1"
             :value-on-clear="null"
             controls-position="right"
-            placeholder="默认 20"
+            placeholder="默认 66"
             style="width: 100%"
           />
         </el-form-item>
       </el-form>
       <p class="geometry-note">
-        留空或点「清除」将按默认远景机位参数估算（20 m 高 / 10° 俯角 / 20° 视场角），误差约 ±40%。
-        距离仅供参考，不代表实测值。
+        选择预设会自动填入典型参数；手机手持为 1.5 m 高 / 12° 俯角 / 66° 视场角。
+        留空或点「清除」将按手机手持默认参数估算，误差约 ±40%。距离仅供参考，不代表实测值。
       </p>
       <template #footer>
         <el-button @click="geometryVisible = false">取消</el-button>

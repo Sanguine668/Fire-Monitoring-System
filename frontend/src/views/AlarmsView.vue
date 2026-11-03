@@ -241,11 +241,16 @@ const distanceSummary = computed(() => {
   return `约 ${Number(d.meters)} m · ${d.band || '—'}（目标高 ${Number(d.size_px)} px）`
 })
 
-const distanceNote = computed(() =>
-  nearestDistanceBox.value?.distance?.method === 'geometry'
-    ? '按视频源安装参数进行几何估算，误差约 ±40%，可在视频源管理中修改'
-    : '按默认安装参数估算（20 m 高 / 10° 俯角 / 20° 视场角），误差约 ±40%，可在视频源管理中修改'
-)
+const distanceNote = computed(() => {
+  const source = nearestDistanceBox.value?.distance?.source
+  if (source === 'geometry') {
+    return '按视频源安装参数进行几何估算，误差约 ±40%，可在视频源管理中修改'
+  }
+  if (source === 'preset') {
+    return '按视频源几何预设估算，误差约 ±40%，可在视频源管理中修改'
+  }
+  return '按手机手持默认参数估算（1.5 m 高 / 12° 俯角 / 66° 视场角），误差约 ±40%，可在视频源管理中修改'
+})
 
 function switchVariant(value) {
   frameVariant.value = value

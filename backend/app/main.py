@@ -6,7 +6,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,8 +34,13 @@ class CameraCreate(BaseModel):
 
 
 class CameraGeometryPayload(BaseModel):
-    """安装参数全部可空；传 null 表示清除并使用默认参数。"""
+    """安装参数与几何预设全部可空；传 null 表示清除并使用默认参数。
 
+    ``preset`` 只能是四种设备类型之一：显式数值优先于预设，预设优先于
+    手机手持默认值。
+    """
+
+    preset: Literal["phone_handheld", "phone_mounted", "tower_telephoto", "custom"] | None = None
     install_height_m: float | None = Field(default=None, ge=0.5, le=100)
     pitch_deg: float | None = Field(default=None, ge=0, le=89)
     hfov_deg: float | None = Field(default=None, ge=10, le=120)
@@ -331,10 +336,16 @@ def create_app() -> FastAPI:
         payload: CameraGeometryPayload,
         reg: CameraRegistry = Depends(registry),
     ) -> dict[str, Any]:
-        """保存/清除相机安装参数；运行中的 Worker 立即用新参数估算距离。"""
+        """保存/清除相机安装参数与几何预设；运行中的 Worker 立即用新参数估算距离。"""
         if not db.get_camera(camera_id):
             raise HTTPException(404, "camera not found")
-        db.set_camera_geometry(camera_id, payload.install_height_m, payload.pitch_deg, payload.hfov_deg)
+        db.set_camera_geometry(
+            camera_id,
+            payload.install_height_m,
+            payload.pitch_deg,
+            payload.hfov_deg,
+            payload.preset,
+        )
         camera = db.get_camera(camera_id)
         if camera is None:  # 并发删除
             raise HTTPException(404, "camera not found")
@@ -345,6 +356,7 @@ def create_app() -> FastAPI:
                     "install_height_m": camera["install_height_m"],
                     "pitch_deg": camera["pitch_deg"],
                     "hfov_deg": camera["hfov_deg"],
+                    "geometry_preset": camera["geometry_preset"],
                 }
             )
         return camera

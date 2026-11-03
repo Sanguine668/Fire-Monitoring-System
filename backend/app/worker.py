@@ -243,15 +243,20 @@ class DetectionWorker(threading.Thread):
                     if (d["type"] == "fire" and d["confidence"] >= float(s["fire_threshold"]))
                     or (d["type"] == "smoke" and d["confidence"] >= float(s["smoke_threshold"]))
                 ]
-                # 安装参数每次从 DB 行读取；API 改完后 Worker 无需重启即可生效。
+                # 安装参数与预设每次从 DB 行读取；API 改完后 Worker 无需重启即可生效。
                 geometry = {
+                    "preset": self.camera.get("geometry_preset"),
                     "install_height_m": self.camera.get("install_height_m"),
                     "pitch_deg": self.camera.get("pitch_deg"),
                     "hfov_deg": self.camera.get("hfov_deg"),
                 }
                 for d in visible:
                     d["distance"] = estimate_distance(
-                        d["bbox"], frame.shape[1], frame.shape[0], geometry
+                        d["bbox"],
+                        frame.shape[1],
+                        frame.shape[0],
+                        geometry,
+                        alarm_type=d["type"],
                     )
                 nearest = min(
                     visible,

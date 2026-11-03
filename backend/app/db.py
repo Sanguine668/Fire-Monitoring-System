@@ -138,6 +138,7 @@ def init_db() -> None:
             ("install_height_m", "REAL"),
             ("pitch_deg", "REAL"),
             ("hfov_deg", "REAL"),
+            ("geometry_preset", "TEXT"),
         ):
             if column not in camera_columns:
                 c.execute(f"ALTER TABLE cameras ADD COLUMN {column} {decl}")
@@ -179,12 +180,14 @@ def set_camera_geometry(
     install_height_m: float | None,
     pitch_deg: float | None,
     hfov_deg: float | None,
+    preset: str | None = None,
 ) -> None:
-    """写入相机安装参数；传 None 表示清除，检测端会回落到默认值。"""
+    """写入相机安装参数与几何预设；传 None 表示清除，检测端会回落到默认值。"""
     with _conn() as c:
         c.execute(
-            "UPDATE cameras SET install_height_m=?, pitch_deg=?, hfov_deg=? WHERE id=?",
-            (install_height_m, pitch_deg, hfov_deg, camera_id),
+            "UPDATE cameras SET install_height_m=?, pitch_deg=?, hfov_deg=?, geometry_preset=?"
+            " WHERE id=?",
+            (install_height_m, pitch_deg, hfov_deg, preset, camera_id),
         )
 
 
