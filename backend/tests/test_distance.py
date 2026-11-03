@@ -121,22 +121,23 @@ def test_tower_preset_small_box_still_yields_kilometres() -> None:
     assert result["meters"] >= 3000
 
 
-def test_mid_frame_disagreement_takes_smaller_estimate() -> None:
-    # 画面中部的 200 px 框：地面法约 5 m，尺寸法约 185 m，矛盾时取小的。
+def test_mid_frame_small_box_uses_size_method() -> None:
+    # 画面中部的中等框（200 px，未进入画面下 1/4）：单目无法区分近小火苗与远烟柱，
+    # 本系统面向远距离监测，按目标像素尺寸反推 -> 烟雾约 185 m。
     bbox = _bbox(0.60, 200)
-    result = estimate_distance(bbox, FRAME_W, FRAME_H, PHONE_DEFAULT)
-    assert result["method"] == "ground"
-    assert result["meters"] <= 10
+    result = estimate_distance(bbox, FRAME_W, FRAME_H, PHONE_DEFAULT, alarm_type="smoke")
+    assert result["method"] == "size"
+    assert 150 <= result["meters"] <= 230
 
 
-def test_mid_frame_agreement_uses_ground_method() -> None:
-    # 40 m 高、3° 俯角、60° 视场角：两法都约 470–520 m，一致时用地面法。
+def test_mid_frame_small_box_prefers_size_method() -> None:
+    # 即使几何参数给出可信的地面交点，画面中部的小框仍按尺寸法（远场优先）。
     geometry = {"install_height_m": 40.0, "pitch_deg": 3.0, "hfov_deg": 60.0}
     bbox = _bbox(0.55, 80)
-    result = estimate_distance(bbox, FRAME_W, FRAME_H, geometry)
-    assert result["method"] == "ground"
+    result = estimate_distance(bbox, FRAME_W, FRAME_H, geometry, alarm_type="smoke")
+    assert result["method"] == "size"
     assert result["source"] == "geometry"
-    assert 400 <= result["meters"] <= 550
+    assert 450 <= result["meters"] <= 600
 
 
 def test_upper_frame_box_uses_size_method() -> None:
@@ -198,13 +199,14 @@ def test_explicit_numbers_override_preset_values() -> None:
 
 
 def test_preset_changes_result_from_default_geometry() -> None:
-    # 手机固定俯角 5° 比手持 12° 平，同一中部框的地面法距离更大。
-    bbox = _bbox(0.60, 80)
-    handheld = estimate_distance(bbox, FRAME_W, FRAME_H, PHONE_DEFAULT)
-    mounted = estimate_distance(bbox, FRAME_W, FRAME_H, {"preset": "phone_mounted"})
-    assert handheld["source"] == "default"
-    assert mounted["source"] == "preset"
-    assert mounted["meters"] > handheld["meters"]
+    # 同一画面位置、同一框，换成塔杆长焦预设（20 m 高）后地面法距离应显著变大。
+    bbox = _bbox(0.95, 300)
+    phone = estimate_distance(bbox, FRAME_W, FRAME_H, PHONE_DEFAULT)
+    tower = estimate_distance(bbox, FRAME_W, FRAME_H, {'preset': 'tower_telephoto'})
+    assert phone['source'] == 'default'
+    assert tower['source'] == 'preset'
+    assert phone['method'] == 'ground' and tower['method'] == 'ground'
+    assert tower['meters'] > phone['meters'] * 3
 
 
 def test_partial_explicit_field_overrides_preset() -> None:

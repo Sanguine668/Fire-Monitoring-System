@@ -58,7 +58,9 @@ DEFAULT_TARGET_HEIGHT_M = TARGET_HEIGHT_M["smoke"]
 CLOSE_RATIO = 0.25  # 框高 / 画面高 >= 25% 视为近距离
 CLOSE_MAX_FACTOR = 1.5  # 近距离结果不超过 d_ground * 1.5
 FAR_BOTTOM_RATIO = 0.45  # 框底在画面上方 45% 区域视为远场
-MIN_GROUND_ANGLE_DEG = 1.0  # pitch + theta 大于该值地面法才有效
+MIN_GROUND_ANGLE_DEG = 1.0
+GROUND_BOTTOM_RATIO = 0.75  # 框底进入画面下 1/4 才认为在近处地面
+CLOSE_RATIO_HARD = 0.35  # 框高/画面高 >= 35% 才允许地面法（即便不在下 1/4）  # pitch + theta 大于该值地面法才有效
 FAR_BOX_PX = 40  # 低于该框高属于实测远/超远档，直接走尺寸法
 
 MIN_METERS = 1
@@ -219,6 +221,18 @@ def estimate_distance(
         else:
             method = "size"
             raw = d_size
+
+    # ── 后置修正（2026-11-03）────────────────────────────────────────....
+    # 单目图像里"画面中部的小框"既可能是近处小火苗，也可能是几百米外的烟柱，
+    # 仅凭像素位置无法区分。本系统面向远距离监测：只要框没有进入画面下 1/4、
+    # 且框本身不大（< 35% 画面高），就按目标像素尺寸反推，避免把远处烟雾算成几米。
+    if (
+        method == "ground"
+        and ratio < CLOSE_RATIO_HARD
+        and y_bottom < fh * GROUND_BOTTOM_RATIO
+    ):
+        method = "size"
+        raw = d_size
 
     if not math.isfinite(raw):
         raw = float(MAX_METERS)
