@@ -67,8 +67,8 @@ def copy_tree(src: Path, dst: Path) -> int:
 
 def build_files() -> dict[str, str]:
     return {
-        "一键运行.ps1": RUN_PS1,
-        "一键运行.bat": RUN_BAT,
+        "run.ps1": RUN_PS1,
+        "run.bat": RUN_BAT,
         "运行说明.md": RUN_DOC,
         ".gitignore": "ai/.venv/\nstorage/\nfrontend/node_modules/\n__pycache__/\n*.pyc\nrelease/\n",
     }
@@ -133,10 +133,10 @@ Start-Process $url
 
 RUN_BAT = r"""@echo off
 chcp 65001 >nul
-title FireGuard AI 一键运行
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0一键运行.ps1"
+title FireGuard AI
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0run.ps1"
 echo.
-echo 服务已退出。
+echo Server exited.
 pause
 """
 
@@ -144,7 +144,7 @@ RUN_DOC = """# FireGuard AI 火情监测系统 — 运行说明
 
 ## 一、双击运行
 
-直接双击 **`一键运行.bat`**（或右键 `一键运行.ps1` → 使用 PowerShell 运行）。
+直接双击 **`run.bat`**（或右键 `run.ps1` → 使用 PowerShell 运行）。
 
 首次运行会自动完成：
 
@@ -181,7 +181,7 @@ scripts/             一键安装引导、演示数据、评测与工具脚本
 samples/             演示视频（安装时复制到 storage/uploads）
 weights/             推理权重 fire26n-v2-far.pt（主）/ fire26n-v2-best.pt（回退）
 requirements.txt     Python 依赖
-一键运行.bat / .ps1  一键启动
+run.bat / .ps1  一键启动
 ```
 
 运行后新增（可随时删除，不影响源码）：
@@ -204,7 +204,7 @@ storage/             数据库、上传视频、告警快照（含推送配置�
 服务窗口是否还在运行？端口 8000 是否被占用（换端口：`ai\\.venv\\Scripts\\python -m uvicorn backend.app.main:app --port 8001`）。
 
 **4. 视频源显示离线**
-演示视频在 `storage/uploads/`；若被删除，重新运行一次 `一键运行.bat` 或执行
+演示视频在 `storage/uploads/`；若被删除，重新运行一次 `run.bat` 或执行
 `ai\\.venv\\Scripts\\python scripts\\bootstrap_demo.py` 会重新复制。
 
 **5. 想清空演示告警**
@@ -258,7 +258,10 @@ def main() -> None:
             print(f"  {rel:<18}   1 文件  {src.stat().st_size / 1048576:8.1f} MB")
 
     for name, content in build_files().items():
-        (PKG / name).write_text(content, encoding="utf-8")
+        # .ps1 必须带 BOM：Windows PowerShell 5.1 无 BOM 时会按 ANSI 解码，
+        # 中文被误解后引号/大括号配对被破坏，脚本直接语法报错。
+        enc = "utf-8-sig" if name.endswith(".ps1") else "utf-8"
+        (PKG / name).write_text(content, encoding=enc)
         total += 1
         print(f"  {name:<18}   1 文件")
 
